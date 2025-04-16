@@ -1,4 +1,4 @@
-certifi==2024.2.2
+certifi==2024.7.4
 confluent-kafka==1.6.1
 Flask
 gevent
