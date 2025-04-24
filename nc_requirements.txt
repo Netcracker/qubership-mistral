@@ -1,4 +1,4 @@
-certifi==2024.2.2
+certifi==2024.7.4
 confluent-kafka==1.6.1
 Flask
 gevent
@@ -8,6 +8,6 @@ psycopg2
 py_mini_racer
 prometheus_client
 setuptools==70.0.0
-urllib3==1.26.18
+urllib3==1.26.19
 # tls issue
 oslo.service==3.4.0
