@@ -208,6 +208,9 @@ class HTTPAction(actions.Action):
         Mistral-Task-Id & Mistral-Action-Execution-Id would be sent with
         the HTTP request. For Async action mistral-http an additional
         header Mistral-Callback-URL would be added.
+    :param user_data: (optional) if ``True``, user information  like
+        User-Name & Project-Name would be sent with
+        the HTTP request.
     """
 
     def __init__(self,
@@ -223,7 +226,8 @@ class HTTPAction(actions.Action):
                  allow_redirects=None,
                  proxies=None,
                  verify=None,
-                 mistral_headers=None):
+                 mistral_headers=None,
+                 user_data=None):
         super(HTTPAction, self).__init__()
 
         if auth and len(auth.split(':')) == 2:
@@ -253,8 +257,12 @@ class HTTPAction(actions.Action):
         self.proxies = proxies
         self.verify = verify
         self.mistral_headers = mistral_headers
+        self.user_data = user_data
 
     def run(self, context):
+
+        LOG.info(f'EXECUTION CONTEXT IS ::::::: {str(context.execution.__dict__)}')
+        LOG.info(f'SECURITY CONTEXT IS ::::::: {str(context.security.__dict__)}')
 
         if self.mistral_headers is True:
             self.headers = self.headers or {}
@@ -265,6 +273,15 @@ class HTTPAction(actions.Action):
                     exec_ctx.workflow_execution_id,
                 'Mistral-Task-Id': exec_ctx.task_execution_id,
                 'Mistral-Action-Execution-Id': exec_ctx.action_execution_id
+            })
+
+        if self.user_data is True:
+            self.headers = self.headers or {}
+            sec_ctx = context.security
+            self.headers.update({
+                'User-Name': sec_ctx.user_name,
+                'Project-Name': sec_ctx.project_name,
+                'Auth-token': sec_ctx.auth_token
             })
 
         LOG.info(
