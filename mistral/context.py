@@ -271,14 +271,20 @@ def _decode_jwt_payload_noverify(token):
 
 def _claims_to_environ(env, claims, token):
     """Map Keycloak-ish claims into the WSGI environ that oslo.context expects."""
+    try:
+        LOG.info(f'CLAIMS IS :::::: {str(claims.__dict__)}')
+        LOG.info(f'ENV IS :::::: {str(env.__dict__)}')
+    except Exception as e:
+        LOG.info(f'CLAIMS IS :::::: {str(claims)}')
+        LOG.info(f'ENV IS :::::: {str(env)}')
+    finally:
+        LOG.info(f'ENV IS :::::: Unable to log')
     # Always pass the raw token through
     env.setdefault('HTTP_X_AUTH_TOKEN', token)
 
     # Minimal identity
     user_id = claims.get('sub') or ''
-    preferred_username = (claims.get('preferred_username')
-                          or claims.get('preferredUsername')
-                          or claims.get('username') or '')
+    preferred_username = claims.get('preferred_username') or ''
     if user_id and 'HTTP_X_USER_ID' not in env:
         env['HTTP_X_USER_ID'] = user_id
     if preferred_username and 'HTTP_X_USER_NAME' not in env:
