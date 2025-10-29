@@ -132,6 +132,20 @@ class MistralContext(oslo_context.RequestContext):
     def from_environ(cls, headers, env):
         kwargs = _extract_mistral_auth_params(headers)
 
+        try:
+            needs_user = not (env.get('HTTP_X_USER_ID') or env.get('HTTP_X_USER_NAME'))
+            token = _get_bearer_token(headers, env)
+            if token and needs_user:
+                LOG.debug("Populating environ from Bearer token for context building")
+                claims = _decode_jwt_payload_noverify(token)
+                if claims:
+                    _claims_to_environ(env, claims, token)
+                else:
+                    LOG.warning("Bearer token present but no claims decoded; "
+                                "context may be incomplete")
+        except Exception as e:
+            LOG.warning("Failed to pre-populate environ from Bearer token: %s", e)
+
         token_info = env.get('keystone.token_info', {})
         if not kwargs['is_target']:
             kwargs['service_catalog'] = token_info.get('token', {})
@@ -227,6 +241,72 @@ def _extract_service_catalog_from_headers(headers):
         return jsonutils.loads(decoded_catalog)
     else:
         return None
+
+
+def _get_bearer_token(headers, env):
+    auth = headers.get('Authorization') or env.get('HTTP_AUTHORIZATION')
+    if not auth or not auth.startswith('Bearer '):
+        return None
+    return auth.split(' ', 1)[1].strip()
+
+def _urlsafe_b64decode(data):
+    # JWT uses urlsafe base64 without padding
+    data += '=' * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data.encode('utf-8'))
+
+def _decode_jwt_payload_noverify(token):
+    """Decode JWT payload without signature verification.
+
+    NOTE: This only fills context; we log a warning to make this explicit.
+    """
+    try:
+        parts = token.split('.')
+        if len(parts) < 2:
+            return {}
+        payload = _urlsafe_b64decode(parts[1]).decode('utf-8')
+        return jsonutils.loads(payload)
+    except Exception as e:
+        LOG.warning("Failed to decode JWT payload: %s", e)
+        return {}
+
+def _claims_to_environ(env, claims, token):
+    """Map Keycloak-ish claims into the WSGI environ that oslo.context expects."""
+    # Always pass the raw token through
+    env.setdefault('HTTP_X_AUTH_TOKEN', token)
+
+    # Minimal identity
+    user_id = claims.get('sub') or ''
+    preferred_username = (claims.get('preferred_username')
+                          or claims.get('preferredUsername')
+                          or claims.get('username') or '')
+    if user_id and 'HTTP_X_USER_ID' not in env:
+        env['HTTP_X_USER_ID'] = user_id
+    if preferred_username and 'HTTP_X_USER_NAME' not in env:
+        env['HTTP_X_USER_NAME'] = preferred_username
+
+    # Try to collect roles: realm + per-client roles
+    roles = []
+    roles.extend((claims.get('realm_access') or {}).get('roles') or [])
+    for _client, data in (claims.get('resource_access') or {}).items():
+        roles.extend(data.get('roles') or [])
+    if roles and 'HTTP_X_ROLES' not in env:
+        env['HTTP_X_ROLES'] = ','.join(sorted(set(roles)))
+
+    # Optional project/tenant mapping if your token carries them
+    if 'project_id' in claims and 'HTTP_X_PROJECT_ID' not in env:
+        env['HTTP_X_PROJECT_ID'] = claims['project_id']
+    if 'project_name' in claims and 'HTTP_X_PROJECT_NAME' not in env:
+        env['HTTP_X_PROJECT_NAME'] = claims['project_name']
+
+    # Expires at for MistralContext consumption (via keystone.token_info)
+    exp = claims.get('exp')
+    if exp and 'keystone.token_info' not in env:
+        try:
+            import datetime, timezone as _tz
+            expires_at = datetime.datetime.fromtimestamp(exp, tz=_tz.utc).isoformat()
+        except Exception:
+            expires_at = None
+        env['keystone.token_info'] = {'token': {'expires_at': expires_at}}
 
 
 class RpcContextSerializer(messaging.Serializer):
