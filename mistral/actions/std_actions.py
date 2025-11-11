@@ -263,6 +263,7 @@ class HTTPAction(actions.Action):
 
         LOG.info(f'EXECUTION CONTEXT IS ::::::: {str(context.execution.__dict__)}')
         LOG.info(f'SECURITY CONTEXT IS ::::::: {str(context.security.__dict__)}')
+        LOG.info(f'HEADERS ARE ::::::: {str(self.headers.__dict__)}')
 
         if self.mistral_headers is True:
             self.headers = self.headers or {}
