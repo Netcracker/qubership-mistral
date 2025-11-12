@@ -223,8 +223,7 @@ class HTTPAction(actions.Action):
                  allow_redirects=None,
                  proxies=None,
                  verify=None,
-                 mistral_headers=None
-                 ):
+                 mistral_headers=None):
         super(HTTPAction, self).__init__()
 
         if auth and len(auth.split(':')) == 2:
