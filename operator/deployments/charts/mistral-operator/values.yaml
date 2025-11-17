@@ -5,7 +5,7 @@
 # Name of MistralService Custom Resource
 name: mistral-service
 
-operatorImage: "ghcr.io/netcracker/qubership-mistral-operator-img:main"
+operatorImage: "ghcr.io/netcracker/qubership-mistral-operator-img:2.0.8"
 operator:
   imagePullPolicy: IfNotPresent
   priorityClassName: ""
@@ -18,7 +18,7 @@ operator:
       memory: 300Mi
 
 mistral:
-  dockerImage: "ghcr.io/netcracker/qubership-mistral:main"
+  dockerImage: "ghcr.io/netcracker/qubership-mistral:2.0.8"
   cloudIntegrationEnabled: true
   liteEnabled: false
   imagePullPolicy: IfNotPresent
@@ -168,7 +168,7 @@ integrationTests:
   runBenchmarks: False
   waitTestResultOnJob: False
   waitTestResultTimeout: 900
-  dockerImage: "ghcr.io/netcracker/qubership-mistral-tests:main"
+  dockerImage: "ghcr.io/netcracker/qubership-mistral-tests:2.0.8"
   mistralReadyTimeout: 90
   securityContext: {}
   prometheusUrl: ''
@@ -176,7 +176,7 @@ integrationTests:
 
 bluegreenAgent:
   enabled: False
-  image: "ghcr.io/netcracker/qubership-mistral-operator-bluegreen-agent-img:main"
+  image: "ghcr.io/netcracker/qubership-mistral-operator-bluegreen-agent-img:2.0.8"
   imagePullPolicy: IfNotPresent
   resources:
     limits:
