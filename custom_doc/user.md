@@ -1327,10 +1327,10 @@ You can also see the smoke test results on the monitoring dashboard.
 
 ## M2M Token Transparency
 
-Authentication tokens that were used to request workflow execution, can be used to authenticate against the API endpoints the task calls.
-Normally the auth token is rotated by mistral before calling the endpoint.
+Authentication tokens that were used to request workflow execution, can be used to authenticate against the API endpoints that the task calls.
+Normally, the auth token is rotated by mistral before calling the endpoint.
 
-The oauth2.transparent_http action passes on the token used to authenticate against mistral to the API endpoint being called. This is done by accessing the Authorization header stored in security context.
+The oauth2.transparent_http action passes on the token used to authenticate against mistral to the API endpoint being called. This is done by accessing the Authorization header stored in the security context.
 
 ```text
 class TransparentAuthHTTPAction(std_actions.HTTPAction):
@@ -1343,7 +1343,6 @@ class TransparentAuthHTTPAction(std_actions.HTTPAction):
             })
         return super(TransparentAuthHTTPAction, self).run(context)
 ```
-
 
 ## Headers Propagation
 
