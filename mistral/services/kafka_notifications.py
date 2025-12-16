@@ -151,6 +151,8 @@ def send_notification(data):
 
 def _get_consumer():
     global __CONSUMER
+    LOG.info("_get_consumer invoked; __CONSUMER is %s",
+             "present" if __CONSUMER else "None")
     if not __CONSUMER:
         topic = cfg.CONF.kafka_notifications.kafka_topic
         group_id = cfg.CONF.kafka_notifications.kafka_consumer_group_id
@@ -176,7 +178,13 @@ def _get_consumer():
             __CONSUMER.poll(timeout=0)
         except Exception as e:
             LOG.warning("Initial poll after subscribe failed: %s", e)
-
+    else:
+        try:
+            LOG.info("_get_consumer returning existing consumer for group=%s topic=%s",
+                     cfg.CONF.kafka_notifications.kafka_consumer_group_id,
+                     cfg.CONF.kafka_notifications.kafka_topic)
+        except Exception:
+            LOG.info("_get_consumer returning existing consumer (could not read cfg values)")
     return __CONSUMER
 
 
@@ -244,8 +252,16 @@ def listen_notifications():
                 msg_count += 1
 
             delta = curr_time - last_commit_time
-            if msg_count and delta.seconds > max_commit_interval \
-                    or msg_count >= min_msg_count_to_commit:
+            # Evaluate commit condition and log details to help debug why it
+            # does/doesn't trigger.
+            cond = ((msg_count and delta.seconds > max_commit_interval)
+                    or (msg_count >= min_msg_count_to_commit))
+            LOG.debug("Commit condition check: msg_count=%d delta_seconds=%d "
+                      "max_commit_interval=%d min_msg_count_to_commit=%d -> %s",
+                      msg_count, delta.seconds, max_commit_interval,
+                      min_msg_count_to_commit, cond)
+
+            if cond:
                 try:
                     _get_consumer().commit(asynchronous=False)
                     last_commit_time = datetime.datetime.now()
@@ -259,6 +275,9 @@ def listen_notifications():
                         msg_count = 0
                     else:
                         raise e
+            else:
+                LOG.debug("Commit not triggered: msg_count=%d delta_seconds=%d",
+                          msg_count, delta.seconds)
 
         except Exception as e:
             LOG.error(e)
