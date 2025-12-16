@@ -81,6 +81,7 @@ def _get_producer():
     global __PRODUCER
     if not __PRODUCER:
         conf = _get_basic_conf()
+        conf.pop('group.id', None)  # remove consumer-only option
         conf['acks'] = 'all'
 
         __PRODUCER = Producer(conf, logger=LOG)

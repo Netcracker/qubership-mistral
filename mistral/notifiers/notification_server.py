@@ -52,11 +52,23 @@ class NotificationServer(service_base.MistralService):
 
         self._notify_started('Notification server started.')
 
-        if cfg.CONF.kafka_notifications.enabled:
-            LOG.info("kafka notifications enabled --> invoking init_consume_loop")
-            init_consume_loop(self.notifier)
-        else:
-            LOG.info("kafka notifications NOT enabled", cfg.CONF.kafka_notifications)
+        # Ensure configuration options (including kafka_notifications) are registered
+        # (imports mistral.config which runs CONF.register_opts)
+        try:
+            import mistral.config  # noqa: F401
+        except Exception as e:
+            LOG.error("Failed to import mistral.config to register config opts: %s", e)
+            # continue without raising so service stays up for debugging
+
+        try:
+            if cfg.CONF.kafka_notifications.enabled:
+                LOG.info("kafka notifications enabled --> invoking init_consume_loop")
+                init_consume_loop(self.notifier)
+            else:
+                LOG.info("kafka notifications NOT enabled: %s", cfg.CONF.kafka_notifications)
+        except Exception as e:
+            LOG.error("Kafka notifications options are not registered: %s", e)
+            LOG.warning("Skipping init_consume_loop because kafka_notifications config is missing")
 
     def stop(self, graceful=False):
         super(NotificationServer, self).stop(graceful)
