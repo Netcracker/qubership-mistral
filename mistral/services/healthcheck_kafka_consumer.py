@@ -46,15 +46,26 @@ def main():
         admin = AdminClient(conf)
         groups = admin.list_groups(timeout=10)
 
+        # If KAFKA_REQUIRE_ACTIVE_MEMBER=true then fail when group is missing
+        # or has no members. Default is false to avoid killing pod during startup.
+        require_active = os.getenv("KAFKA_REQUIRE_ACTIVE_MEMBER", "false").lower() == "true"
+
         target_group = next((g for g in groups if g.id == group_id), None)
 
         if not target_group:
             print(f"Consumer group '{group_id}' not found.")
-            sys.exit(1)
+            if require_active:
+                sys.exit(1)
+            else:
+                # Broker reachable but group not yet present; treat as healthy
+                sys.exit(0)
 
         if not target_group.members:
             print(f"Consumer group '{group_id}' has no active members.")
-            sys.exit(1)
+            if require_active:
+                sys.exit(1)
+            else:
+                sys.exit(0)
 
         print(f"Consumer group '{group_id}' has {len(target_group.members)}" +
               " active member(s).")
