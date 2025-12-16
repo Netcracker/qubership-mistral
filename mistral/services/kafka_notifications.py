@@ -47,6 +47,7 @@ __PRODUCER_CHECK_TIME = None
 
 def _get_basic_conf():
     host = cfg.CONF.kafka_notifications.kafka_host
+    LOG.info("Kafka broker host: %s", host)
 
     conf = {
         'bootstrap.servers': host
@@ -157,7 +158,8 @@ def _get_consumer():
 
         conf = _get_basic_conf()
         conf['group.id'] = group_id
-        conf['auto.offset.reset'] = 'smallest'
+        # "earliest" is the modern equivalent of the old "smallest"
+        conf['auto.offset.reset'] = 'earliest'
         conf['enable.auto.commit'] = False
         conf['max.poll.interval.ms'] = max_poll_interval
         conf['default.topic.config'] = {
@@ -166,6 +168,13 @@ def _get_consumer():
 
         __CONSUMER = Consumer(conf, logger=LOG)
         __CONSUMER.subscribe(topics=[topic])
+        LOG.info("Kafka consumer subscribed: group=%s topic=%s", group_id, topic)
+        # Force a zero-timeout poll to trigger group join / heartbeats so the
+        # consumer appears quickly in Kafka consumer group listing / UI.
+        try:
+            __CONSUMER.poll(timeout=0)
+        except Exception as e:
+            LOG.warning("Initial poll after subscribe failed: %s", e)
 
     return __CONSUMER
 
