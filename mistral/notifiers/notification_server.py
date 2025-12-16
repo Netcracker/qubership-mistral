@@ -53,7 +53,10 @@ class NotificationServer(service_base.MistralService):
         self._notify_started('Notification server started.')
 
         if cfg.CONF.kafka_notifications.enabled:
+            LOG.info("kafka notifications enabled --> invoking init_consume_loop")
             init_consume_loop(self.notifier)
+        else:
+            LOG.info("kafka notifications NOT enabled", cfg.CONF.kafka_notifications)
 
     def stop(self, graceful=False):
         super(NotificationServer, self).stop(graceful)
