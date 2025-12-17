@@ -515,7 +515,7 @@ notifier_opts = [
 kafka_notifications_opts = [
     cfg.BoolOpt(
         'enabled',
-        default=False,
+        default=True,
         help=_('Enable mistral notifications using kafka instead of RabbitMQ.')
     ),
     cfg.StrOpt(
@@ -551,17 +551,19 @@ kafka_notifications_opts = [
     ),
     cfg.BoolOpt(
         'kafka_tls_enabled',
-        default=False
+        default=True
     ),
     cfg.BoolOpt(
         'kafka_security_enabled',
-        default=False
+        default=True
     ),
     cfg.StrOpt(
-        'kafka_sasl_plain_username'
+        'kafka_sasl_plain_username',
+        default='admin'
     ),
     cfg.StrOpt(
-        'kafka_sasl_plain_password'
+        'kafka_sasl_plain_password',
+        default='admin'
     ),
     cfg.IntOpt(
         'kafka_consumer_poll_timeout',
