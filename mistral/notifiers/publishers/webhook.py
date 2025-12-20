@@ -18,6 +18,7 @@ import json
 from oslo_config import cfg
 from oslo_log import log as logging
 import requests
+from requests.exceptions import ChunkedEncodingError, RequestException
 
 from mistral.notifiers import base
 from mistral.services import secure_request
@@ -39,7 +40,17 @@ class WebhookPublisher(base.NotificationPublisher):
         if cfg.CONF.oauth2.security_profile == 'prod':
             headers = secure_request.set_auth_token(headers)
 
-        resp = requests.post(url, data=json.dumps(data), headers=headers)
+        timeout = kwargs.get('timeout', (5, 10))
+
+        try:
+            resp = requests.post(url, json=data, headers=headers, timeout=timeout)
+            resp.raise_for_status()
+        except ChunkedEncodingError as e:
+            LOG.warning("ChunkedEncodingError sending webhook to %s: %s", url, e, exc_info=True)
+            return
+        except RequestException:
+            LOG.exception("Failed to send webhook to %s", url)
+            return
 
         LOG.info("Webook request url=%s code=%s", url, resp.status_code)
 

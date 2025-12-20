@@ -19,6 +19,7 @@ import json
 from oslo_config import cfg
 import requests
 from six.moves import http_client
+from requests.exceptions import ChunkedEncodingError, RequestException
 
 from oslo_log import log as logging
 
@@ -40,6 +41,7 @@ class WebhookOneThreadPublisher(base.NotificationPublisher):
             number_of_retries = int(kwargs.get('number_of_retries', 3))
             polling_time = int(kwargs.get('polling_time', 10))
             first_attempt = True
+            timeout = kwargs.get('timeout', (5, 10))
 
             LOG.info(
                 "Webhook: [event=%s, ex_id=%s, url=%s, number_of_retries=%s,"
@@ -60,33 +62,32 @@ class WebhookOneThreadPublisher(base.NotificationPublisher):
 
                     resp = requests.post(
                         url,
-                        data=json.dumps(data),
-                        headers=headers
+                        json=data,
+                        headers=headers,
+                        timeout=timeout
                     )
 
-                    if resp.status_code in [http_client.OK,
-                                            http_client.CREATED]:
+                    if resp.status_code in [http_client.OK, http_client.CREATED]:
                         LOG.info(
-                            "Message delivered: "
-                            "[event=%s:%s, ex_id=%s, url=%s,"
-                            " number_of_retry=%s]",
-                            data["name"], event, ex_id, url, retry_count
+                            "Message delivered: [event=%s:%s, ex_id=%s, url=%s, number_of_retry=%s]",
+                            data.get("name"), event, ex_id, url, retry_count
                         )
                         return
                     else:
                         LOG.error(
-                            "Message not delivered: "
-                            "[event=%s:%s, ex_id=%s, url=%s, status_code=%s, "
-                            "text=%s, number_of_retry=%s]",
-                            data["name"], event, ex_id, url, resp.status_code,
-                            resp.text, retry_count
+                            "Message not delivered: [event=%s:%s, ex_id=%s, url=%s, status_code=%s, text=%s, number_of_retry=%s]",
+                            data.get("name"), event, ex_id, url, resp.status_code, resp.text, retry_count
                         )
-                except BaseException as e:
-                    LOG.error(
-                        "Message not delivered: "
-                        "[event=%s:%s, ex_id=%s, url=%s, message=%s, "
-                        "number_of_retry=%s]",
-                        data["name"], event, ex_id, url, str(e), retry_count
+                except (ChunkedEncodingError, RequestException) as e:
+                    LOG.warning(
+                        "Network error delivering webhook to %s: %s (retry=%s)",
+                        url, e, retry_count,
+                        exc_info=True
+                    )
+                except Exception as e:
+                    LOG.exception(
+                        "Unexpected error delivering webhook to %s: %s (retry=%s)",
+                        url, e, retry_count
                     )
 
                 retry_count += 1
