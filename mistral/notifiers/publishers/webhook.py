@@ -18,6 +18,7 @@ import json
 from oslo_config import cfg
 from oslo_log import log as logging
 import requests
+from requests.exceptions import ChunkedEncodingError
 
 from mistral.notifiers import base
 from mistral.services import secure_request
@@ -39,9 +40,32 @@ class WebhookPublisher(base.NotificationPublisher):
         if cfg.CONF.oauth2.security_profile == 'prod':
             headers = secure_request.set_auth_token(headers)
 
-        resp = requests.post(url, data=json.dumps(data), headers=headers)
+        # Use stream=True to prevent automatic reading of response body
+        # This avoids ChunkedEncodingError in urllib3 2.x when chunked
+        # transfer encoding is incomplete
+        resp = requests.post(
+            url,
+            data=json.dumps(data),
+            headers=headers,
+            stream=True
+        )
 
         LOG.info("Webook request url=%s code=%s", url, resp.status_code)
 
         if resp.status_code not in [HTTPStatus.OK, HTTPStatus.CREATED]:
-            raise Exception(resp.text)
+            # Only read response body when needed (error case)
+            try:
+                error_text = resp.text
+            except ChunkedEncodingError:
+                # If chunked encoding is incomplete, use content instead
+                error_text = resp.content.decode('utf-8', errors='replace')
+            raise Exception(error_text)
+        else:
+            # For successful responses, consume the response to avoid
+            # connection pool issues, but ignore any chunked encoding errors
+            try:
+                resp.content
+            except ChunkedEncodingError:
+                # Ignore chunked encoding errors for successful responses
+                # The request was successful, we just couldn't read the full body
+                pass
