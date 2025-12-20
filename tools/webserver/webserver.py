@@ -14,6 +14,7 @@
 
 from flask import Flask
 from flask import request
+from flask import jsonify
 
 app = Flask(__name__)
 
@@ -33,6 +34,10 @@ def post():
     app.logger.debug('Body: %s', request.get_data())
     return request.get_data()
 
+@app.route("/wf_retry_notify", methods=["POST"])
+def webhook():
+    data = request.json
+    return jsonify({"status": "ok"}), 200
 
-if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=8000)
+# if __name__ == "__main__":
+#     app.run(debug=True, host='0.0.0.0', port=8000)
