@@ -48,9 +48,7 @@ class WebhookOneThreadPublisher(base.NotificationPublisher):
                 number_of_retries, polling_time
             )
 
-            unlim = False
-            if number_of_retries == -1:
-                unlim = True
+            unlim = number_of_retries == -1
 
             retry_count = 1
             while first_attempt or unlim or retry_count <= number_of_retries:
@@ -59,9 +57,6 @@ class WebhookOneThreadPublisher(base.NotificationPublisher):
                     if cfg.CONF.oauth2.security_profile == 'prod':
                         headers = secure_request.set_auth_token(headers)
 
-                    # Use stream=True to prevent automatic reading of response body
-                    # This avoids ChunkedEncodingError in urllib3 2.x when chunked
-                    # transfer encoding is incomplete
                     resp = requests.post(
                         url,
                         data=json.dumps(data),
@@ -69,30 +64,23 @@ class WebhookOneThreadPublisher(base.NotificationPublisher):
                         stream=True
                     )
 
-                    if resp.status_code in [http_client.OK,
-                                            http_client.CREATED]:
+                    if resp.status_code in [http_client.OK, http_client.CREATED]:
                         LOG.info(
                             "Message delivered: "
                             "[event=%s:%s, ex_id=%s, url=%s,"
                             " number_of_retry=%s]",
                             data["name"], event, ex_id, url, retry_count
                         )
-                        # For successful responses, consume the response to avoid
-                        # connection pool issues, but ignore any chunked encoding errors
                         try:
                             resp.content
                         except ChunkedEncodingError:
-                            # Ignore chunked encoding errors for successful responses
-                            # The request was successful, we just couldn't read the full body
                             pass
                         return
                     else:
-                        # Only read response body when needed (error case)
                         try:
                             error_text = resp.text
                         except ChunkedEncodingError:
-                            # If chunked encoding is incomplete, use content instead
-                            error_text = resp.content.decode('utf-8', errors='replace')
+                            error_text = f"HTTP {resp.status_code}"
                         LOG.error(
                             "Message not delivered: "
                             "[event=%s:%s, ex_id=%s, url=%s, status_code=%s, "
@@ -100,6 +88,7 @@ class WebhookOneThreadPublisher(base.NotificationPublisher):
                             data["name"], event, ex_id, url, resp.status_code,
                             error_text, retry_count
                         )
+
                 except BaseException as e:
                     LOG.error(
                         "Message not delivered: "
