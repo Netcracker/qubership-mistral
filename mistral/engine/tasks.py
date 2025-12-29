@@ -1227,9 +1227,7 @@ class WithItemsTask(RegularTask):
         count = db_api.get_sub_executions_count(
             self.task_ex.id,
             workflow=self.task_ex.spec.get('workflow'),
-            accepted=True,
-            states=[states.RUNNING],
-            or_=True
+            accepted=True
         )
 
         return self._get_with_items_count() > count
