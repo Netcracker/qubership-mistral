@@ -4,6 +4,7 @@ Module to handle all the kubernetes operations
 
 import logging
 import requests
+import os
 from requests import auth
 
 from mistral_constants import DEFAULT_VHOST
@@ -133,10 +134,14 @@ class RabbitMQHelper(object):
         )
 
     def request(self, url, method='PUT', json=None):
+        rmq_tls_enabled = os.getenv("RABBITMQ_TLS_ENABLED", "false").lower() == "true"
+        scheme = "https" if rmq_tls_enabled else "http"
+        port = 15671 if rmq_tls_enabled else 15672
         res = requests.request(
-            url='http://' + self._host + ':15672/api/' + url,
+            url=f"{scheme}://{self._host}:{port}/api/{url}",
             method=method,
             auth=auth.HTTPBasicAuth(self._admin_user, self._admin_password),
-            json=json)
+            json=json,
+            verify=False if rmq_tls_enabled else True)
 
         return res

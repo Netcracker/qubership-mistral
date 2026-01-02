@@ -5,8 +5,17 @@ attempts=0
 
 while [ "$attempts" -le 30 ]
 do
-  if [ "$(curl -LI -u "$RABBIT_ADMIN_USER":"$RABBIT_ADMIN_PASSWORD" -X GET http://"$RABBIT_HOST":15672/api/overview -o /dev/null -w '%{http_code}\n' -s)" == "200" ];
-  then
+  if [ "$RABBITMQ_TLS_ENABLED" = "True" ]; then
+    HTTP_CODE=$(curl -k -LI -u "$RABBIT_ADMIN_USER:$RABBIT_ADMIN_PASSWORD" \
+        -X GET "https://$RABBIT_HOST:15671/api/overview" \
+        -o /dev/null -w '%{http_code}\n' -s)
+  else
+    HTTP_CODE=$(curl -LI -u "$RABBIT_ADMIN_USER:$RABBIT_ADMIN_PASSWORD" \
+        -X GET "http://$RABBIT_HOST:15672/api/overview" \
+        -o /dev/null -w '%{http_code}\n' -s)
+  fi
+   
+  if [ "$HTTP_CODE" == "200" ]; then
     break;
   fi
   echo Waiting RabbitMQ start

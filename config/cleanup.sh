@@ -41,9 +41,24 @@ fi
 
 echo "Start deleting RabbitMQ vhost"
 
-response=$(curl -u "$RABBIT_ADMIN_USER:$RABBIT_ADMIN_PASSWORD" \
-                -X DELETE "http://$RABBIT_HOST:15672/api/vhosts/$RABBIT_VHOST" \
-                -s -o /dev/null -w "%{http_code}")
+if [ "$RABBITMQ_TLS_ENABLED" = "True" ]; then
+  echo "Using TLS RabbitMQ management API"
+
+  response=$(curl -k \
+    -u "$RABBIT_ADMIN_USER:$RABBIT_ADMIN_PASSWORD" \
+    -X DELETE \
+    "https://$RABBIT_HOST:15671/api/vhosts/$RABBIT_VHOST" \
+    -s -o /dev/null -w "%{http_code}")
+
+else
+  echo "Using non-TLS RabbitMQ management API"
+
+  response=$(curl \
+    -u "$RABBIT_ADMIN_USER:$RABBIT_ADMIN_PASSWORD" \
+    -X DELETE \
+    "http://$RABBIT_HOST:15672/api/vhosts/$RABBIT_VHOST" \
+    -s -o /dev/null -w "%{http_code}")
+fi
 
 if [ "$response" -eq 204 ]; then
   echo "vhost $RABBIT_HOST successfuly deleted."
