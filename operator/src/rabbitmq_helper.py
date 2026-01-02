@@ -4,7 +4,6 @@ Module to handle all the kubernetes operations
 
 import logging
 import requests
-import os
 from requests import auth
 
 from mistral_constants import DEFAULT_VHOST
