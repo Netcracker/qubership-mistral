@@ -2,10 +2,11 @@
 
 set -e
 attempts=0
+RABBITMQ_TLS_ENABLED="${RABBITMQ_TLS_ENABLED:-false}"
 
 while [ "$attempts" -le 30 ]
 do
-  if [ "$RABBITMQ_TLS_ENABLED" = "True" ]; then
+  if [ "$(echo "$RABBITMQ_TLS_ENABLED" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
     HTTP_CODE=$(curl -k -LI -u "$RABBIT_ADMIN_USER:$RABBIT_ADMIN_PASSWORD" \
         -X GET "https://$RABBIT_HOST:15671/api/overview" \
         -o /dev/null -w '%{http_code}\n' -s)

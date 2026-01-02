@@ -40,8 +40,9 @@ else
 fi
 
 echo "Start deleting RabbitMQ vhost"
+RABBITMQ_TLS_ENABLED="${RABBITMQ_TLS_ENABLED:-false}"
 
-if [ "$RABBITMQ_TLS_ENABLED" = "True" ]; then
+if [ "$(echo "$RABBITMQ_TLS_ENABLED" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
   echo "Using TLS RabbitMQ management API"
 
   response=$(curl -k \
