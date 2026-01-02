@@ -3023,8 +3023,8 @@ class KubernetesHelper:
         rabbit_host = self._spec['mistralCommonParams']["rabbit"]["host"]
         rabbit_vhost = self._spec['mistralCommonParams']["rabbit"]["vhost"]
         queue_name_prefix = self._spec['mistralCommonParams']["queueNamePrefix"]
-        rabbit_tls_enabled = self.tls_enabled and self._spec['mistral']['tls']['services']['rabbitmq']['enabled']
-        logger.info("tls_enabled =", self.tls_enabled)
+        rabbit_tls_enabled = self.tls_enabled() and self._spec['mistral']['tls']['services']['rabbitmq']['enabled']
+        logger.info("tls_enabled =", self.tls_enabled())
         logger.info("rabbitmq tls enabled =", self._spec['mistral']['tls']['services']['rabbitmq']['enabled'])
         logger.info("rabbit_tls_enabled =", rabbit_tls_enabled)
         return RabbitMQHelper(rabbit_tls_enabled=rabbit_tls_enabled,
