@@ -13,8 +13,9 @@ LOG = logging.getLogger(__name__)
 
 
 class RabbitMQHelper(object):
-    def __init__(self, rabbit_host, rabbit_vhost, rabbit_user, rabbit_password, admin_user,
+    def __init__(self, rabbit_tls_enabled, rabbit_host, rabbit_vhost, rabbit_user, rabbit_password, admin_user,
                  admin_password, queue_name_prefix):
+        self._tls_enabled = rabbit_tls_enabled
         self._host = rabbit_host
         self._vhost = rabbit_vhost
         self._user = rabbit_user
@@ -134,14 +135,13 @@ class RabbitMQHelper(object):
         )
 
     def request(self, url, method='PUT', json=None):
-        rmq_tls_enabled = os.getenv("RABBITMQ_TLS_ENABLED", "false").lower() == "true"
-        scheme = "https" if rmq_tls_enabled else "http"
-        port = 15671 if rmq_tls_enabled else 15672
+        scheme = "https" if self._tls_enabled else "http"
+        port = 15671 if self._tls_enabled else 15672
         res = requests.request(
             url=f"{scheme}://{self._host}:{port}/api/{url}",
             method=method,
             auth=auth.HTTPBasicAuth(self._admin_user, self._admin_password),
             json=json,
-            verify=False if rmq_tls_enabled else True)
+            verify=False if self._tls_enabled else True)
 
         return res
