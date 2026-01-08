@@ -4,6 +4,8 @@ metadata:
   name: {{ .Values.name }}
   labels:
     app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "argocd.argoproj.io/hook": "PostSync"
 spec:
   operatorId: {{ template "mistral.operatorId" . }}
 {{ if .Values.labels }}
