@@ -4,3 +4,4 @@ asyncpg==0.29.0
 python-dotenv==1.0.1
 setuptools==80.9.0
 starlette>=0.40.0
+jaraco.context==6.1.0

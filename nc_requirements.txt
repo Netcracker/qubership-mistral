@@ -7,7 +7,7 @@ psycopg2
 py_mini_racer
 prometheus_client
 setuptools==80.9.0
-urllib3==2.6.2
+urllib3==2.6.3
 # tls issue
 oslo.service>=4.2.2
 fastapi
@@ -17,3 +17,5 @@ eventlet>=0.40.3
 
 #context issue
 oslo.context==5.7.1
+pyasn1>=0.6.2
+jaraco.context==6.1.0

@@ -1,4 +1,4 @@
-FROM python:3.10.19-alpine3.22
+FROM python:3.10.19-alpine3.23
 
 WORKDIR /app
 RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.20/main/' > /etc/apk/repositories && \

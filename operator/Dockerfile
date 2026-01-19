@@ -1,4 +1,4 @@
-FROM python:3.10.19-alpine3.22 AS wheelhouse
+FROM python:3.10.19-alpine3.23 AS wheelhouse
 
 RUN python --version && pip --version
 
@@ -7,7 +7,7 @@ COPY build/requirements.txt requirements.txt
 RUN pip install --no-cache-dir --upgrade pip==25.3 wheel && \
     pip wheel --no-cache-dir -r requirements.txt    -w /wheels
 
-FROM python:3.10.19-alpine3.22
+FROM python:3.10.19-alpine3.23
 
 ENV WORKDIR=/opt/operator/ \
     USER_UID=1001 \

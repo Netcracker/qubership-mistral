@@ -4,6 +4,8 @@ pykube-ng
 pyyaml
 requests
 
+pyasn1>=0.6.2
+
 attrs<22.1.0
 urllib3>=2.5.0
 charset-normalizer<2.1.1
@@ -12,3 +14,4 @@ websocket-client<1.4.0
 certifi>=2023.7.22
 
 setuptools>=80.9.0
+jaraco.context==6.1.0
