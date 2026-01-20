@@ -15,8 +15,8 @@ FROM python:3.10.19-alpine3.23 AS wheelhouse
 
 RUN python --version && pip --version
 
-RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/main/' > /etc/apk/repositories && \
-    echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/community/' >> /etc/apk/repositories
+# RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/main/' > /etc/apk/repositories && \
+#     echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/community/' >> /etc/apk/repositories
 
 RUN apk add --no-cache \
     alpine-sdk \
