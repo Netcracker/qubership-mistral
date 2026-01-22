@@ -128,7 +128,6 @@ class MonitoringServer(service_base.MistralService):
             cert_dir = "/opt/mistral/mount_configs/tls/"
             tls_cert_path = cert_dir + "tls.crt"
             tls_key_path = cert_dir + "tls.key"
-            tls_ca_path = cert_dir + "ca.crt"
             LOG.info("SSL/TLS mode on for monitoring")
 
             uvicorn.run(
@@ -136,8 +135,7 @@ class MonitoringServer(service_base.MistralService):
                 host="0.0.0.0",
                 port=9090,
                 ssl_certfile=tls_cert_path,
-                ssl_keyfile=tls_key_path,
-                ssl_ca_certs=tls_ca_path
+                ssl_keyfile=tls_key_path
             )
         else:
             uvicorn.run(app, host="0.0.0.0", port=9090)
