@@ -102,6 +102,7 @@ jobs:
         with:
           release-version: ${{ inputs.release }}
           config-file: .github/helm-charts-release-config.yaml
+          create-release-branch: "false"
         env:
           ${{ insert }}: ${{ vars }}
       - name: "Debug"
