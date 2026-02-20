@@ -360,10 +360,7 @@
             "additionalProperties": true,
             "properties": {
                 "secret_change": {
-                    "type": [
-                        "integer",
-                        "string"
-                    ]
+                    "type": "integer"
                 },
                 "auth": {
                     "type": "object",
@@ -827,10 +824,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "cpu": {
-                            "type": [
-                                "string",
-                                "number"
-                            ]
+                            "type": "string"
                         },
                         "memory": {
                             "type": "string"
