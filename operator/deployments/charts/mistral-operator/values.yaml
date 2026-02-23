@@ -210,12 +210,12 @@ mistralCommonParams:
     port: "5432"
     idleTimeout: "30s"
   kafkaNotifications:
-    enabled: "True"
+    enabled: True
     host: "kafka.kafka:9092"
     topic: ""
-    topicPartitionsCount: "2"
+    topicPartitionsCount: 2
     consumerGroupId: "notification_consumer_group"
-    securityEnabled: "True"
+    securityEnabled: True
   queueNamePrefix: "mistral"
   rabbit:
     host: "rabbitmq.rabbitmq"
@@ -380,7 +380,7 @@ mistralEngine:
       cpu: 300m
       memory: 750Mi
     limits:
-      cpu: 1
+      cpu: "1"
       memory: 750Mi
   affinity:
     podAntiAffinity:
