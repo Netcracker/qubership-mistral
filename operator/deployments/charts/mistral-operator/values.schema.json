@@ -812,7 +812,14 @@
                     "additionalProperties": false,
                     "properties": {
                         "cpu": {
-                            "type": "string"
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
                         },
                         "memory": {
                             "type": "string"
@@ -824,7 +831,14 @@
                     "additionalProperties": false,
                     "properties": {
                         "cpu": {
-                            "type": "string"
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
                         },
                         "memory": {
                             "type": "string"
