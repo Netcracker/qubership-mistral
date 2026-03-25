@@ -6,6 +6,7 @@ kubernetes
 psycopg2
 py_mini_racer
 prometheus_client
+#reverting for testing
 setuptools==78.1.1
 urllib3==2.6.3
 # tls issue
