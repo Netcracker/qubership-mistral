@@ -27,7 +27,7 @@ except ImportError:
 
 setuptools.setup(
     setup_requires=[
-        'setuptools==80.10.2',
+        'setuptools==78.1.1',
         'pbr>=2.0.0'
     ],
     pbr=True
