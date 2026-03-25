@@ -11,7 +11,7 @@ RUN BRANCH=$(git rev-parse --abbrev-ref HEAD) && \
     COMMIT_DATE=$(date) && \
     echo "{ \"git\": { \"branch\": \"$BRANCH\", \"id\": \"$ID\", \"time\": \"$COMMIT_DATE\" }}" > /repo/version.json
 
-FROM python:3.10.19-alpine3.23 AS wheelhouse
+FROM python:3.10.17-alpine3.22 AS wheelhouse
 
 RUN python --version && pip --version
 
@@ -34,11 +34,11 @@ RUN apk add --no-cache \
 WORKDIR /wheels
 COPY requirements.txt nc_requirements.txt /tmp/
 RUN python --version && pip --version && \
-    pip install --no-cache-dir --upgrade pip==25.3 wheel && \
+    pip install --no-cache-dir --upgrade pip==23.3 wheel && \
     pip wheel --no-cache-dir -r /tmp/requirements.txt    -w /wheels && \
     pip wheel --no-cache-dir -r /tmp/nc_requirements.txt -w /wheels
 
-FROM python:3.10.19-alpine3.23
+FROM python:3.10.17-alpine3.22
 
 LABEL "maintainer"="Vadim Zelenevskii wortellen@gmail.com"
 
@@ -113,7 +113,7 @@ COPY --from=gitmeta /repo/version.json /opt/mistral/version.json
 
 COPY requirements.txt nc_requirements.txt ./
 COPY --from=wheelhouse /wheels /wheels
-RUN pip install --no-cache-dir --upgrade pip==25.3 wheel && \
+RUN pip install --no-cache-dir --upgrade pip==23.3 wheel && \
     pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt && \
     pip install --no-cache-dir --no-index --find-links=/wheels -r nc_requirements.txt && \
     pip install --no-dependencies --no-cache-dir -e $MISTRAL_HOME && \
