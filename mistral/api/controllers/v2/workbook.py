@@ -89,6 +89,9 @@ class WorkbooksController(rest.RestController, hooks.HookController):
         definition = pecan.request.text
         scope = pecan.request.GET.get('scope', 'private')
 
+        if scope == 'public':
+            acl.enforce('workbooks:publicize', context.ctx())
+
         # If "skip_validation" is present in the query string parameters
         # then workflow language validation will be disabled.
         skip_validation = 'skip_validation' in pecan.request.GET
@@ -120,6 +123,9 @@ class WorkbooksController(rest.RestController, hooks.HookController):
 
         definition = pecan.request.text
         scope = pecan.request.GET.get('scope', 'private')
+
+        if scope == 'public':
+            acl.enforce('workbooks:publicize', context.ctx())
 
         # If "skip_validation" is present in the query string parameters
         # then workflow language validation will be disabled.
