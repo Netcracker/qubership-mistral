@@ -8,34 +8,36 @@ spec:
     dockerImage: "ghcr.io/netcracker/qubership-mistral"
   mistralCommonParams:
     auth:
-      enable: 'False'
-      type: 'mitreid'
+      enable: "False"
+      type: "mitreid"
     dbaas:
-      agentUrl: 'http://dbaas-agent:8080'
-      aggregatorUrl: ''
-    debugLog: 'False'
-    externalMistralUrl: ''
-    guaranteedNotifierEnabled: 'False'
-    idpServer: ''
-    multitenancyEnabled: 'False'
-    osMistralUrl: 'http://mistral.mistral:8989/v2'
+      agentUrl: "http://dbaas-agent:8080"
+      aggregatorUrl: ""
+    debugLog: "False"
+    externalMistralUrl: ""
+    guaranteedNotifierEnabled: "False"
+    idpServer: ""
+    multitenancyEnabled: "False"
+    osMistralUrl: "http://mistral.mistral:8989/v2"
     postgres:
-      dbName: 'mistraldb'
-      host: 'pg.pg.svc'
-      port: '5432'
-    queueNamePrefix: 'mistral'
+      dbName: "mistraldb"
+      host: "pg.pg.svc"
+      port: "5432"
+    queueNamePrefix: "mistral"
     rabbit:
-      host: 'rabbitmq.rabbitmq.svc'
-      port: '5672'
-      vhost: '/'
-    rpcImplementation: 'oslo'
-    securityProfile: 'prod'
-    usePypy: 'False'
+      host: "rabbitmq.rabbitmq.svc"
+      port: "5672"
+      vhost: "/"
+    rpcImplementation: "oslo"
+    securityProfile: "prod"
+    usePypy: "False"
     zipkin:
-      logLevel: 'all'
-      url: ''
-  mistralCustomParams: ''
+      logLevel: "all"
+      url: ""
+  mistralCustomParams: ""
   mistralApi:
+    spec:
+      serviceAccountName: mistral-api-sa
     replicas: 1
     resources:
       requests:
@@ -53,12 +55,12 @@ spec:
       limits:
         cpu: 100m
         memory: 300Mi
-    recoveryInterval: '30'
-    hangInterval: '300'
-    recoveryEnabled: 'True'
-    monitoringExecutionDelay: '600'
-    monitoringEnabled: 'True'
-    metricCollectionInterval: '30'
+    recoveryInterval: "30"
+    hangInterval: "300"
+    recoveryEnabled: "True"
+    monitoringExecutionDelay: "600"
+    monitoringEnabled: "True"
+    metricCollectionInterval: "30"
   mistralExecutor:
     replicas: 1
     resources:
@@ -68,11 +70,11 @@ spec:
       limits:
         cpu: 200m
         memory: 300Mi
-    certificateStore: 'http://certificate-store:8080'
-    retrieverPort: '8777'
-    httpProxy: ''
-    httpsProxy: ''
-    noProxy: ''
+    certificateStore: "http://certificate-store:8080"
+    retrieverPort: "8777"
+    httpProxy: ""
+    httpsProxy: ""
+    noProxy: ""
   mistralEngine:
     replicas: 1
     resources:
@@ -93,8 +95,8 @@ spec:
         memory: 300Mi
   mistralUpdateDbPod:
     memoryLimit: 300Mi
-    mountConfigsHome: '/opt/mistral/mount_configs'
-    args: './upgrade_db.sh'
+    mountConfigsHome: "/opt/mistral/mount_configs"
+    args: "./upgrade_db.sh"
   mistralLite:
     includeLocalRmq: false
     resources:
