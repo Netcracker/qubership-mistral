@@ -489,7 +489,8 @@ Determining whether IDP JWK Secrets should be populated
 */}}
 {{- define "idpSecrets.populate" -}}
 {{- $auth := toString (default false .Values.mistralCommonParams.auth.enable) | lower -}}
-{{- if (eq $auth "true") -}}
+{{- $authType := default "" .Values.mistralCommonParams.auth.type | lower -}}
+{{- if and (eq $auth "true") (ne $authType "k8s-sa") -}}
 {{- if and
   (not (empty .Values.secrets.idpClientId))
   (ne  (toString .Values.secrets.idpClientId) "null")
