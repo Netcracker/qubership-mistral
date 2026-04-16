@@ -1496,6 +1496,10 @@ class KubernetesHelper:
             logger.info("Auth is not enabled.")
             return
 
+        if auth_type == "k8s-sa":
+            logger.info("Auth type is kubernetes service account token review.")
+            return
+
         idp_server = self._spec['mistralCommonParams'].get('idpServer')
         idp_external_server = self._spec['mistralCommonParams'].get('idpExternalServer')
 
