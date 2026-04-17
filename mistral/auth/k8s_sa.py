@@ -15,7 +15,7 @@ CONF = cfg.CONF
 
 TOKEN_HEADER_KEY = 'Authorization'
 AUTH_HEADER_PATTERN = re.compile(r'^\w+\s(.*)$')
-
+DEFAULT_PROJECT_ID = "<default-project>"
 
 def extract_token_from_header(headers):
     header_with_token = headers.get(TOKEN_HEADER_KEY)
@@ -83,9 +83,9 @@ class K8sSAAuthHandler(auth.AuthHandler):
         namespace, sa_name = self._parse_username(user.username)
         roles = self._map_roles(user.groups)
 
-        # Set headers similar to other auth handlers
+        # TODO: change header
         req.headers["X-Identity-Status"] = "Confirmed"
-        req.headers["X-Project-Id"] = namespace
+        req.headers["X-Project-Id"] = DEFAULT_PROJECT_ID
         req.headers["X-User-Id"] = sa_name
         req.headers["X-Roles"] = ','.join(roles)
 
@@ -123,6 +123,7 @@ class K8sSAAuthHandler(auth.AuthHandler):
 
         return parts[2], parts[3]
 
+    # TODO: change as per requirement
     def _map_roles(self, groups):
         """
         Map K8s groups to Mistral roles
