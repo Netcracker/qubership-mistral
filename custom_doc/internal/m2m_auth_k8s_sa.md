@@ -13,7 +13,7 @@ mistralCommonParams:
         type: k8s-sa
 ```
 
-Added a new [handler](https://github.com/Netcracker/qubership-mistral/blob/fix/reduce_resources/mistral/auth/k8s_sa.py) at mistral/auth/k8s_sa.py and hooked it in [setup.cfg](https://github.com/Netcracker/qubership-mistral/blob/fix/reduce_resources/setup.cfg#L117). This is now responsible for
+Added a new [handler](https://github.com/Netcracker/qubership-mistral/blob/feat/m2m_auth/mistral/auth/k8s_sa.py) at mistral/auth/k8s_sa.py and hooked it in [setup.cfg](https://github.com/Netcracker/qubership-mistral/blob/feat/m2m_auth/setup.cfg#L117). This is now responsible for
 
 - Extact the token from incoming request
 - Call Kubernetes TokenReview API for token validation
