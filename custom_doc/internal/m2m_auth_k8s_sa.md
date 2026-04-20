@@ -28,7 +28,7 @@ config.load_incluster_config()
 This loads:
 
 - the Service Account token of the Mistral API pod
-- cluster API endpoint
+- cluster API endpoint to the client config
 
 This enables Mistral to securely communicate with the Kubernetes API Server
 
