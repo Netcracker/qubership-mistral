@@ -1,3 +1,5 @@
+import base64
+import json
 import re
 
 from oslo_log import log as logging
@@ -85,7 +87,7 @@ class K8sSAAuthHandler(auth.AuthHandler):
         namespace, sa_name = self._parse_username(user.username)
         roles = self._map_roles(user.groups)
 
-        claims = self._extract_claims(response.status, namespace, sa_name)
+        claims = self._extract_claims(response.status, namespace, sa_name, token)
         project_id = resolve_project(
             self._project_rules, claims, DEFAULT_PROJECT_ID
         )
@@ -115,30 +117,29 @@ class K8sSAAuthHandler(auth.AuthHandler):
                 message=_("Failed to validate token with Kubernetes")
             )
 
-    def _extract_claims(self, status, namespace, sa_name):
-        """Build a flat claims dict from TokenReview status for rule evaluation.
+    def _extract_claims(self, status, namespace, sa_name, token):
+        """Build a flat claims dict for rule evaluation.
 
-        Always-present fields:
-          namespace, service_account, username, groups
-
-        From status.audiences (token audience):
-          aud
-
-        From status.user.extra (arbitrary key/value pairs set by the
-        authenticator — keys are often prefixed, e.g.
-        "authentication.kubernetes.io/pod-name"):
-          each key exposed both as-is and by its last path segment
+        Start from the raw JWT payload (which contains aud, iss, sub, etc.),
+        then overlay the fields derived from the TokenReview response so
+        that the validated identity always takes precedence.
         """
-        claims = {
-            'namespace': namespace,
-            'service_account': sa_name,
-            'username': status.user.username,
-            'groups': list(status.user.groups or []),
-        }
+        claims = {}
 
-        audiences = getattr(status, 'audiences', None)
-        if audiences:
-            claims['aud'] = list(audiences)
+        # Decode JWT payload without verification — K8s already validated it.
+        try:
+            payload_part = token.split('.')[1]
+            # Pad to a multiple of 4 for base64 decoding.
+            payload_part += '=' * (4 - len(payload_part) % 4)
+            claims.update(json.loads(base64.urlsafe_b64decode(payload_part)))
+        except Exception as e:
+            LOG.warning("Could not decode JWT payload for claims: %s", e)
+
+        # Overlay with authoritative values from the TokenReview response.
+        claims['namespace'] = namespace
+        claims['service_account'] = sa_name
+        claims['username'] = status.user.username
+        claims['groups'] = list(status.user.groups or [])
 
         extra = getattr(status.user, 'extra', None) or {}
         for key, values in extra.items():
@@ -147,6 +148,7 @@ class K8sSAAuthHandler(auth.AuthHandler):
             if short_key not in claims:
                 claims[short_key] = values
 
+        LOG.debug("Auth claims for rule evaluation: %s", claims)
         return claims
 
     def _parse_username(self, username):

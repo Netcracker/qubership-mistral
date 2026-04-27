@@ -119,6 +119,7 @@ class Mistral(object):
         self._tasks = None
         self._tenant = None
         self._tokens = {}
+        self._idp = None
 
         if self._auth_enable:
             if self._auth_type == 'mitreid':
@@ -140,7 +141,7 @@ class Mistral(object):
         return str(res.status_code)
 
     def get_token(self):
-        if not self._auth_enable:
+        if not self._auth_enable or self._auth_type == 'k8s-sa':
             return ""
 
         tenant = self._tenant if self._tenant else self._main_tenant
