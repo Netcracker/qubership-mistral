@@ -1,11 +1,13 @@
+import re
+
 from oslo_log import log as logging
 from oslo_config import cfg
-import re
 
 from kubernetes import client, config
 
 from mistral._i18n import _
 from mistral import auth
+from mistral.auth import load_project_rules, resolve_project
 from mistral import exceptions as exc
 
 
@@ -16,6 +18,7 @@ CONF = cfg.CONF
 TOKEN_HEADER_KEY = 'Authorization'
 AUTH_HEADER_PATTERN = re.compile(r'^\w+\s(.*)$')
 DEFAULT_PROJECT_ID = "<default-project>"
+
 
 def extract_token_from_header(headers):
     header_with_token = headers.get(TOKEN_HEADER_KEY)
@@ -63,13 +66,13 @@ class K8sSAAuthHandler(auth.AuthHandler):
             LOG.info("Loaded kubeconfig for Kubernetes")
 
         self.api = client.AuthenticationV1Api()
+        self._project_rules = load_project_rules()
 
     def authenticate(self, req):
         LOG.info("K8sSAAuthHandler.authenticate() called")
-        LOG.info("Incoming headers: %s", req.headers)
+        LOG.debug("Incoming headers: %s", req.headers)
         headers = req.headers
         token = extract_token_from_header(headers)
-
 
         response = self._review_token(token)
         LOG.info("TokenReview response: %s", response)
@@ -79,19 +82,23 @@ class K8sSAAuthHandler(auth.AuthHandler):
             raise exc.UnauthorizedException(message="Invalid K8s SA token")
 
         user = response.status.user
-
         namespace, sa_name = self._parse_username(user.username)
         roles = self._map_roles(user.groups)
 
-        # TODO: change header
+        claims = self._extract_claims(response.status, namespace, sa_name)
+        project_id = resolve_project(
+            self._project_rules, claims, DEFAULT_PROJECT_ID
+        )
+
         req.headers["X-Identity-Status"] = "Confirmed"
-        req.headers["X-Project-Id"] = DEFAULT_PROJECT_ID
+        req.headers["X-Project-Id"] = project_id
         req.headers["X-User-Id"] = sa_name
         req.headers["X-Roles"] = ','.join(roles)
 
         LOG.debug(
-            "Authenticated K8s SA token: namespace=%s, sa=%s, roles=%s",
-            namespace, sa_name, roles
+            "Authenticated K8s SA token: namespace=%s, sa=%s, "
+            "roles=%s, project_id=%s",
+            namespace, sa_name, roles, project_id
         )
 
     def _review_token(self, token):
@@ -107,6 +114,40 @@ class K8sSAAuthHandler(auth.AuthHandler):
             raise exc.UnauthorizedException(
                 message=_("Failed to validate token with Kubernetes")
             )
+
+    def _extract_claims(self, status, namespace, sa_name):
+        """Build a flat claims dict from TokenReview status for rule evaluation.
+
+        Always-present fields:
+          namespace, service_account, username, groups
+
+        From status.audiences (token audience):
+          aud
+
+        From status.user.extra (arbitrary key/value pairs set by the
+        authenticator — keys are often prefixed, e.g.
+        "authentication.kubernetes.io/pod-name"):
+          each key exposed both as-is and by its last path segment
+        """
+        claims = {
+            'namespace': namespace,
+            'service_account': sa_name,
+            'username': status.user.username,
+            'groups': list(status.user.groups or []),
+        }
+
+        audiences = getattr(status, 'audiences', None)
+        if audiences:
+            claims['aud'] = list(audiences)
+
+        extra = getattr(status.user, 'extra', None) or {}
+        for key, values in extra.items():
+            claims[key] = values
+            short_key = key.split('/')[-1]
+            if short_key not in claims:
+                claims[short_key] = values
+
+        return claims
 
     def _parse_username(self, username):
         """

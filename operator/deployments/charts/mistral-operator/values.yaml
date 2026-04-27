@@ -193,6 +193,22 @@ mistralCommonParams:
     type: "keycloak-oidc"
     certs: ""
     cloudCoreUsername: ""
+    projectRules: []
+    # Example (applies when type is k8s-sa or keycloak-oidc):
+    # projectRules:
+    #   - field: namespace
+    #     value: dbaas
+    #     project: dbaas-project
+    #   - field: service_account
+    #     value: monitoring-sa
+    #     project: monitoring-project
+    #   - field: groups
+    #     value: "system:serviceaccounts:cloud"
+    #     project: cloud-common
+    #   - field: aud
+    #     value: account
+    #     project: cloud-platform
+
   dbaas:
     agentUrl: "http://dbaas-agent:8080"
     aggregatorUrl: ""

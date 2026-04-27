@@ -760,6 +760,25 @@ keycloak_oidc_opts = [
     )
 ]
 
+auth_opts = [
+    cfg.StrOpt(
+        'project_rules',
+        default='[]',
+        help=_('JSON list of project mapping rules shared by k8s-sa and '
+               'keycloak-oidc auth handlers. Each rule has "field" '
+               '(claim name to match), "value" (expected value), and '
+               '"project" (the Mistral project_id to assign). '
+               'For list-type claims the rule matches when value is in the '
+               'list; for scalar claims it matches on equality. '
+               'Rules are evaluated in order; the first match wins. '
+               'If no rule matches, each handler falls back to its default: '
+               'keycloak uses the realm name, k8s-sa uses "<default-project>". '
+               'An empty list (default) skips rule evaluation entirely. '
+               'Example: [{"field": "namespace", "value": "dbaas", '
+               '"project": "dbaas-project"}]')
+    ),
+]
+
 oauth2_opts = [
     cfg.StrOpt(
         'idp_url',
@@ -997,6 +1016,7 @@ ACTION_LOGGING_GROUP = 'action_logging'
 CONTEXT_VERSIONING_GROUP = 'context_versioning'
 PROFILER_GROUP = profiler.list_opts()[0][0]
 KEYCLOAK_OIDC_GROUP = "keycloak_oidc"
+AUTH_GROUP = "auth"
 YAQL_GROUP = "yaql"
 HEALTHCHECK_GROUP = 'healthcheck'
 KEYSTONE_GROUP = "keystone"
@@ -1039,6 +1059,7 @@ CONF.register_opts(kafka_notifications_opts, group=KAFKA_NOTIFICATION_GROUP)
 CONF.register_opts(headers_propagation_opts, group=HEADERS_PROP_GROUP)
 CONF.register_opts(profiler_opts, group=PROFILER_GROUP)
 CONF.register_opts(keycloak_oidc_opts, group=KEYCLOAK_OIDC_GROUP)
+CONF.register_opts(auth_opts, group=AUTH_GROUP)
 CONF.register_opts(yaql_opts, group=YAQL_GROUP)
 CONF.register_opts(healthcheck_opts, group=HEALTHCHECK_GROUP)
 CONF.register_opts(oauth2_opts, group=OAUTH2_GROUP)
@@ -1087,6 +1108,7 @@ def list_opts():
         (EXECUTION_EXPIRATION_POLICY_GROUP, execution_expiration_policy_opts),
         (PROFILER_GROUP, profiler_opts),
         (KEYCLOAK_OIDC_GROUP, keycloak_oidc_opts),
+        (AUTH_GROUP, auth_opts),
         (YAQL_GROUP, yaql_opts),
         (HEALTHCHECK_GROUP, healthcheck_opts),
         (OAUTH2_GROUP, oauth2_opts),

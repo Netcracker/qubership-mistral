@@ -214,6 +214,14 @@ spec:
       {{- if .Values.mistralCommonParams.auth.cloudCoreUsername }}
       cloudCoreUsername: {{ .Values.mistralCommonParams.auth.cloudCoreUsername }}
       {{- end}}
+      {{- if .Values.mistralCommonParams.auth.projectRules }}
+      projectRules:
+      {{- range .Values.mistralCommonParams.auth.projectRules }}
+        - field: {{ .field | quote }}
+          value: {{ .value | quote }}
+          project: {{ .project | quote }}
+      {{- end }}
+      {{- end }}
     dbaas:
       agentUrl: {{ .Values.mistralCommonParams.dbaas.agentUrl }}
       {{- if .Values.mistralCommonParams.dbaas.aggregatorUrl }}

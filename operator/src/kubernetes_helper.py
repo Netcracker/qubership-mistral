@@ -5,6 +5,7 @@ from time import sleep
 from datetime import datetime
 from datetime import timezone
 
+import json
 import logging
 import base64
 import kopf
@@ -822,6 +823,12 @@ class KubernetesHelper:
                 value_from=V1EnvVarSource(
                     config_map_key_ref=V1ConfigMapKeySelector(
                         key='auth-type',
+                        name=MC.COMMON_CONFIGMAP))),
+            V1EnvVar(
+                name='AUTH_PROJECT_RULES',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='auth-project-rules',
                         name=MC.COMMON_CONFIGMAP))),
             V1EnvVar(
                 name='CLEANUP',
@@ -1935,7 +1942,10 @@ class KubernetesHelper:
                 configmap['kafkaNotifications']['topicPartitionsCount']),
             'kafka-consumer-group-id': str(configmap['kafkaNotifications']['consumerGroupId']),
             'kafka-security-enabled': str(configmap['kafkaNotifications']['securityEnabled']),
-            'cleanup': str(configmap.get('cleanup'))
+            'cleanup': str(configmap.get('cleanup')),
+            'auth-project-rules': json.dumps(
+                configmap.get('auth', {}).get('projectRules', [])
+            ),
         }
 
         if self.is_local_rmq():
