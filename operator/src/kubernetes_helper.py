@@ -917,6 +917,11 @@ class KubernetesHelper:
                 )
             )
 
+        auth_type = self._spec['mistralCommonParams']['auth']['type']
+        api_service_account = (
+            MC.API_SERVICE_ACCOUNT if auth_type == 'k8s-sa' else None
+        )
+
         pod_template_spec = V1PodTemplateSpec(
             metadata=V1ObjectMeta(
                 labels=self.get_labels(
@@ -944,7 +949,8 @@ class KubernetesHelper:
                 volumes=None,
                 affinity=affinity,
                 security_context=self.get_security_context(server),
-                priority_class_name = None
+                priority_class_name=None,
+                service_account_name=api_service_account
             )
         )
 
