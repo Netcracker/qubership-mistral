@@ -377,6 +377,25 @@
                         },
                         "cloudCoreUsername": {
                             "type": "string"
+                        },
+                        "projectRules": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["field", "value", "project"],
+                                "properties": {
+                                    "field": {
+                                        "type": "string"
+                                    },
+                                    "value": {
+                                        "type": "string"
+                                    },
+                                    "project": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
                         }
                     }
                 },
