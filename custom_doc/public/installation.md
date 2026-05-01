@@ -549,6 +549,15 @@ The Integration Tests parameters are as follows:
 | GatewayAPI.gatewayName | Name of the Gateway | default-external-gateway |
 | GatewayAPI.gatewayNamespace | Namespace of the Gateway | gateway-system |
 
+## Composite Namespace Parameters
+
+When Mistral and OSS services run in different namespaces, set `ossNamespace` to the OSS namespace so the Helm chart automatically constructs FQDNs for OSS service URLs, resolving cross-namespace DNS failures.
+
+|Parameter|Type|Mandatory|Default value|Description|
+|---|---|---|---|---|
+|ossNamespace|string|no|""|OSS services namespace. When set, FQDNs are auto-generated for `dbaas-agent`, `identity-provider`, and `certificate-store` URLs. Leave empty for single-namespace deployments.|
+
+
 # Installation
 
 The installation process is described below.

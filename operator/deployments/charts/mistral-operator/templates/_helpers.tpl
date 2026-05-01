@@ -576,3 +576,38 @@ Helm version for helm chart
     {{- .Values.GatewayAPI.gatewayNamespace -}}
   {{- end -}}
 {{- end -}}
+
+{{/*
+Use FQDNs if ossNamespace is set; otherwise, use bare hostnames
+*/}}
+{{- define "mistral.dbaasAgentUrl" -}}
+  {{- if .Values.ossNamespace -}}
+    {{- printf "http://dbaas-agent.%s.svc:8080" .Values.ossNamespace -}}
+  {{- else -}}
+    {{- .Values.mistralCommonParams.dbaas.agentUrl -}}
+  {{- end -}}
+{{- end -}}
+
+{{- define "mistral.idpServer" -}}
+  {{- if .Values.ossNamespace -}}
+    {{- printf "http://identity-provider.%s.svc:8080" .Values.ossNamespace -}}
+  {{- else -}}
+    {{- .Values.mistralCommonParams.idpServer -}}
+  {{- end -}}
+{{- end -}}
+
+{{- define "mistral.idpExternalServer" -}}
+  {{- if .Values.ossNamespace -}}
+    {{- printf "http://identity-provider.%s.svc:8080" .Values.ossNamespace -}}
+  {{- else -}}
+    {{- .Values.mistralCommonParams.idpExternalServer -}}
+  {{- end -}}
+{{- end -}}
+
+{{- define "mistral.certificateStore" -}}
+  {{- if .Values.ossNamespace -}}
+    {{- printf "http://certificate-store.%s.svc:8080" .Values.ossNamespace -}}
+  {{- else -}}
+    {{- .Values.mistralExecutor.certificateStore -}}
+  {{- end -}}
+{{- end -}}

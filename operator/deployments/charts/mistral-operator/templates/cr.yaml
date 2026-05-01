@@ -212,7 +212,7 @@ spec:
       cloudCoreUsername: {{ .Values.mistralCommonParams.auth.cloudCoreUsername }}
       {{- end}}
     dbaas:
-      agentUrl: {{ .Values.mistralCommonParams.dbaas.agentUrl }}
+      agentUrl: {{ include "mistral.dbaasAgentUrl" . }}
       {{- if .Values.mistralCommonParams.dbaas.aggregatorUrl }}
       aggregatorUrl: {{ .Values.mistralCommonParams.dbaas.aggregatorUrl }}
       {{- end}}
@@ -221,8 +221,8 @@ spec:
     externalMistralUrl: {{ .Values.mistralCommonParams.externalMistralUrl }}
     {{- end}}
     guaranteedNotifierEnabled: {{ .Values.mistralCommonParams.guaranteedNotifierEnabled }}
-    idpServer: {{ .Values.mistralCommonParams.idpServer }}
-    idpExternalServer: {{ .Values.mistralCommonParams.idpExternalServer }}
+    idpServer: {{ include "mistral.idpServer" . }}
+    idpExternalServer: {{ include "mistral.idpExternalServer" . }}
     idpUserPrecreated: {{ .Values.mistralCommonParams.idpUserPrecreated }}
     multitenancyEnabled: {{ .Values.mistralCommonParams.multitenancyEnabled }}
     osMistralUrl: {{ .Values.mistralCommonParams.osMistralUrl }}
@@ -305,7 +305,7 @@ spec:
     {{- if .Values.mistralExecutor.loggingProxyAdminUrl}}
     loggingProxyAdminUrl: {{ .Values.mistralExecutor.loggingProxyAdminUrl }}
     {{- end}}
-    certificateStore: {{ .Values.mistralExecutor.certificateStore }}
+    certificateStore: {{ include "mistral.certificateStore" . }}
     retrieverPort: {{ .Values.mistralExecutor.retrieverPort }}
     {{- if .Values.mistralExecutor.httpProxy}}
     httpProxy: {{ .Values.mistralExecutor.httpProxy }}

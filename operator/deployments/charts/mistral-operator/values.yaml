@@ -491,3 +491,5 @@ secrets:
 GatewayAPI:
   gatewayName: "default-external-gateway"
   gatewayNamespace: "gateway-system"
+
+ossNamespace: ""
