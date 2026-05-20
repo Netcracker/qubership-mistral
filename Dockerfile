@@ -96,6 +96,7 @@ RUN mkdir -p "${CONFIGS_HOME}" && \
 
 RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/main/' > /etc/apk/repositories && \
     echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/community/' >> /etc/apk/repositories && \
+    apk upgrade --no-cache && \
     apk add --no-cache \
     gettext \
     procps \

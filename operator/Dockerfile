@@ -23,7 +23,7 @@ RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/main/' > /etc/apk/reposito
 #     apk add --no-cache \
 #       expat=2.4.3-r0
 
-RUN apk update
+RUN apk update && apk upgrade --no-cache
 
 COPY build/requirements.txt requirements.txt
 COPY build/user_setup /usr/local/bin

@@ -2,8 +2,8 @@ FROM python:3.10.19-alpine3.23
 
 WORKDIR /app
 RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/main/' > /etc/apk/repositories && \
-    echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/community/' >> /etc/apk/repositories \
-    apk update && apk add --no-cache \
+    echo 'https://dl-cdn.alpinelinux.org/alpine/v3.23/community/' >> /etc/apk/repositories && \
+    apk update && apk upgrade --no-cache && apk add --no-cache \
     curl
 
 COPY requirements.txt .
