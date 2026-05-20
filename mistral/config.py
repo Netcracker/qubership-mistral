@@ -66,6 +66,23 @@ auth_type_opt = cfg.StrOpt(
     help=_('Authentication type (valid options: keystone, keycloak-oidc)')
 )
 
+auth_opts = [
+    cfg.StrOpt(
+        'project_rules',
+        help=_(
+            'Rules for resolving project_id from token.'
+            'Example: [{"type": "extract", "field": "iss", '
+            '"pattern": "*/realms/{value}"}]'
+        )
+    )
+]
+
+default_project_id_opt = cfg.StrOpt(
+    'default_project_id',
+    help=_(
+        'Fallback project_id used when no project rule matches. '
+    )
+)
 legacy_action_provider_opts = [
     cfg.BoolOpt(
         'load_action_plugins',
@@ -996,6 +1013,7 @@ ACTION_HEARTBEAT_GROUP = 'action_heartbeat'
 ACTION_LOGGING_GROUP = 'action_logging'
 CONTEXT_VERSIONING_GROUP = 'context_versioning'
 PROFILER_GROUP = profiler.list_opts()[0][0]
+AUTH_GROUP = 'auth'
 KEYCLOAK_OIDC_GROUP = "keycloak_oidc"
 YAQL_GROUP = "yaql"
 HEALTHCHECK_GROUP = 'healthcheck'
@@ -1008,6 +1026,7 @@ RABBITMQ_GROUP = 'rabbitmq'
 
 CONF.register_opt(wf_trace_log_name_opt)
 CONF.register_opt(auth_type_opt)
+CONF.register_opt(default_project_id_opt)
 CONF.register_opt(scheduler_type_opt)
 CONF.register_opt(js_impl_opt)
 CONF.register_opt(rpc_impl_opt)
@@ -1041,6 +1060,7 @@ CONF.register_opts(kafka_notifications_opts, group=KAFKA_NOTIFICATION_GROUP)
 CONF.register_opts(headers_propagation_opts, group=HEADERS_PROP_GROUP)
 CONF.register_opts(coordination_opts, group=COORDINATION_GROUP)
 CONF.register_opts(profiler_opts, group=PROFILER_GROUP)
+CONF.register_opts(auth_opts, group=AUTH_GROUP)
 CONF.register_opts(keycloak_oidc_opts, group=KEYCLOAK_OIDC_GROUP)
 CONF.register_opts(yaql_opts, group=YAQL_GROUP)
 CONF.register_opts(healthcheck_opts, group=HEALTHCHECK_GROUP)
@@ -1060,6 +1080,7 @@ default_group_opts = itertools.chain(
     [
         wf_trace_log_name_opt,
         auth_type_opt,
+        default_project_id_opt,
         scheduler_type_opt,
         js_impl_opt,
         rpc_impl_opt,
@@ -1095,6 +1116,7 @@ def list_opts():
         (COORDINATION_GROUP, coordination_opts),
         (EXECUTION_EXPIRATION_POLICY_GROUP, execution_expiration_policy_opts),
         (PROFILER_GROUP, profiler_opts),
+        (AUTH_GROUP, auth_opts),
         (KEYCLOAK_OIDC_GROUP, keycloak_oidc_opts),
         (YAQL_GROUP, yaql_opts),
         (HEALTHCHECK_GROUP, healthcheck_opts),
