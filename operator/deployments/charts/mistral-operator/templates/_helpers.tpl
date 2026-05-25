@@ -85,6 +85,7 @@ seccompProfile:
 
 {{- define "restricted.globalContainerSecurityContext" -}}
 allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
 capabilities:
   drop: ["ALL"]
 {{- end -}}
