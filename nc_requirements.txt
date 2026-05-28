@@ -2,7 +2,7 @@ certifi>=2024.7.4
 confluent-kafka==1.6.1
 gevent
 jsonschema<4.6.0
-kubernetes
+kubernetes<36
 psycopg2
 py_mini_racer
 prometheus_client
@@ -13,7 +13,7 @@ oslo.service>=4.2.2
 fastapi
 uvicorn
 Jinja2==3.1.6
-eventlet>=0.40.3
+#eventlet>=0.40.3
 
 #context issue
 oslo.context==5.7.1
