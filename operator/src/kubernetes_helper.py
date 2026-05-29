@@ -75,13 +75,8 @@ class KubernetesHelper:
         return V1VolumeMount(name='tmp', mount_path='/tmp')
 
     @staticmethod
-    def _get_mistral_config_volume():
-        return V1Volume(name='mistral-config',
-                        empty_dir=V1EmptyDirVolumeSource(size_limit='100Mi'))
-
-    @staticmethod
-    def _get_mistral_config_volume_mount():
-        return V1VolumeMount(name='mistral-config', mount_path='/opt/mistral')
+    def _get_config_redirect_env():
+        return V1EnvVar(name='CONFIG', value='/tmp/mistral.conf')
 
     @staticmethod
     def _get_pythondontwritebytecode_env():
@@ -223,9 +218,7 @@ class KubernetesHelper:
                 )
             )
         volumes.append(self._get_tmp_volume())
-        volumes.append(self._get_mistral_config_volume())
         volume_mounts.append(self._get_tmp_volume_mount())
-        volume_mounts.append(self._get_mistral_config_volume_mount())
 
         envs = [
             V1EnvVar(
@@ -385,6 +378,7 @@ class KubernetesHelper:
                         key='queue-name-prefix',
                         name=MC.COMMON_CONFIGMAP))),
             self._get_pythondontwritebytecode_env(),
+            self._get_config_redirect_env(),
         ]
 
         if self.tls_enabled():
@@ -464,9 +458,7 @@ class KubernetesHelper:
             [V1VolumeMount(name=MC.MISTRAL_CUSTOM_CONFIG_VOLUME,
                            mount_path=mounth_path)]
         volumes.append(self._get_tmp_volume())
-        volumes.append(self._get_mistral_config_volume())
         volume_mounts.append(self._get_tmp_volume_mount())
-        volume_mounts.append(self._get_mistral_config_volume_mount())
         job_pod_spec = V1PodSpec(
             containers=[
                 V1Container(
@@ -528,6 +520,7 @@ class KubernetesHelper:
                                     key='pg-admin-password',
                                     name=MC.MISTRAL_SECRET))),
                         self._get_pythondontwritebytecode_env(),
+                        self._get_config_redirect_env(),
                     ],
                     args=['./dr.sh'],
                     resources=container_resources,
@@ -875,6 +868,7 @@ class KubernetesHelper:
                         key='cleanup',
                         name=MC.COMMON_CONFIGMAP))),
             self._get_pythondontwritebytecode_env(),
+            self._get_config_redirect_env(),
         ]
 
         if self.tls_enabled():
@@ -956,7 +950,6 @@ class KubernetesHelper:
                 )
             )
         mounts.append(self._get_tmp_volume_mount())
-        mounts.append(self._get_mistral_config_volume_mount())
 
         pod_template_spec = V1PodTemplateSpec(
             metadata=V1ObjectMeta(
@@ -1133,7 +1126,6 @@ class KubernetesHelper:
                 name=MC.MISTRAL_TLS_CONFIG_VOLUME
             ),
             self._get_tmp_volume(),
-            self._get_mistral_config_volume(),
         ]
 
         spec = client.V1DeploymentSpec(
@@ -2349,10 +2341,15 @@ class KubernetesHelper:
                     config_map_key_ref=V1ConfigMapKeySelector(
                         key='queue-name-prefix',
                         name=MC.COMMON_CONFIGMAP))),
+             self._get_pythondontwritebytecode_env(),
++            self._get_config_redirect_env(),
         ]
 
         if self.tls_enabled():
             envs.extend(self.get_tls_envs())
+
+        volumes.append(self._get_tmp_volume())
+        volume_mounts.append(self._get_tmp_volume_mount())
 
         job_pod_spec = V1PodSpec(
             containers=[
