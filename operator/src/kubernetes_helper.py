@@ -2342,7 +2342,7 @@ class KubernetesHelper:
                         key='queue-name-prefix',
                         name=MC.COMMON_CONFIGMAP))),
              self._get_pythondontwritebytecode_env(),
-+            self._get_config_redirect_env(),
+             self._get_config_redirect_env(),
         ]
 
         if self.tls_enabled():
