@@ -2784,8 +2784,15 @@ class KubernetesHelper:
             namespace=self._workspace
         )
 
-        volumes = []
-        volume_mounts = []
+        volumes = [
+            self._get_tmp_volume(),
+            V1Volume(name='robot-output',
+                     empty_dir=V1EmptyDirVolumeSource(size_limit='500Mi'))
+        ]
+        volume_mounts = [
+            self._get_tmp_volume_mount(),
+            V1VolumeMount(name='robot-output', mount_path='/opt/robot/output')
+        ]
         if self.is_secret_present(MC.MISTRAL_TLS_SECRET):
             volumes.append(
                 V1Volume(
