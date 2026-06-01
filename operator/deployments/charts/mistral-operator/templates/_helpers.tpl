@@ -69,6 +69,8 @@ runAsNonRoot: true
 {{- if ne $platform "OPENSHIFT" }}
 seccompProfile:
   type: "RuntimeDefault"
+runAsUser: 1000
+runAsGroup: 1000
 {{- end }}
 {{- end -}}
 

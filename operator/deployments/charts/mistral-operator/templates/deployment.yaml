@@ -78,10 +78,10 @@ spec:
       containers:
         - name: mistral-operator
           image: {{ template "mistral.operatorImage" . }}
-          {{ if .Values.operator }}
-          imagePullPolicy: {{ default "IfNotPresent" .Values.operator.imagePullPolicy }}
           securityContext:
             {{- include "restricted.globalContainerSecurityContext" . | nindent 12 }}
+          {{ if .Values.operator }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.operator.imagePullPolicy }}
           resources:
             limits:
               cpu: {{ default "100m" .Values.operator.resources.limits.cpu  }}

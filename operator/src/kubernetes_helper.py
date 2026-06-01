@@ -94,6 +94,10 @@ class KubernetesHelper:
         sec_context = {camelback2snake(k): v for k, v in sec_context_base.items()}
         if not sec_context.get("run_as_non_root"):
             sec_context["run_as_non_root"] = True
+        if sec_context.get("run_as_user") is None:
+            sec_context["run_as_user"] = 1000
+        if sec_context.get("run_as_group") is None:
+            sec_context["run_as_group"] = 1000
 
         if sec_context.get("seccomp_profile"):
             profile = sec_context.get("seccomp_profile").get("type")
@@ -1446,6 +1450,8 @@ class KubernetesHelper:
                      value=None if no_proxy is None else str(no_proxy)),
             V1EnvVar(name='SKIP_RABBIT_USER_CREATION',
                      value='True'),
+            self._get_pythondontwritebytecode_env(),
+            self._get_config_redirect_env(),
         ]
 
         if self.tls_enabled():
@@ -1455,7 +1461,8 @@ class KubernetesHelper:
             name=MC.CUSTOM_CONFIGMAP,
             items=[V1KeyToPath(key=MC.CUSTOM_CONFIG, path=MC.CUSTOM_CONFIG_FILE_PATH)],
             default_mode=420),
-            name=MC.MISTRAL_CUSTOM_CONFIG_VOLUME)]
+            name=MC.MISTRAL_CUSTOM_CONFIG_VOLUME),
+            self._get_tmp_volume()]
 
         pod_template_spec = V1PodTemplateSpec(
             metadata=V1ObjectMeta(
@@ -1479,7 +1486,7 @@ class KubernetesHelper:
                 volume_mounts=[V1VolumeMount(
                     mount_path='/opt/mistral/mount_configs/custom',
                     name=MC.MISTRAL_CUSTOM_CONFIG_VOLUME
-                )],
+                ), self._get_tmp_volume_mount()],
                 ports=[V1ContainerPort(
                     container_port=8989,
                     protocol='TCP')],
@@ -2777,6 +2784,8 @@ class KubernetesHelper:
                                 name=MC.MISTRAL_SECRET)))
                 ]
             )
+
+        container_envs.append(self._get_pythondontwritebytecode_env())
 
         meta = V1ObjectMeta(
             labels=self.get_labels({'app': MC.MISTRAL_TESTS}),
