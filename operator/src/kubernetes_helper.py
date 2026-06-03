@@ -100,6 +100,8 @@ class KubernetesHelper:
             sec_context["run_as_user"] = _default_uid
         if sec_context.get("run_as_group") is None:
             sec_context["run_as_group"] = _default_uid
+        if sec_context.get("fs_group") is None:
+            sec_context["fs_group"] = _default_uid
 
         if sec_context.get("seccomp_profile"):
             profile = sec_context.get("seccomp_profile").get("type")

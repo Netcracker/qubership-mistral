@@ -74,6 +74,7 @@ spec:
         {{- if ne (default "KUBERNETES" .Values.PAAS_PLATFORM) "OPENSHIFT" }}
         runAsUser: 1001
         runAsGroup: 1001
+        fsGroup: 1001
         {{- end }}
       {{- if .Values.operator.priorityClassName }}
       priorityClassName: {{ .Values.operator.priorityClassName }}
