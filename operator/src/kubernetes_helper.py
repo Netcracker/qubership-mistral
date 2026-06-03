@@ -94,14 +94,6 @@ class KubernetesHelper:
         sec_context = {camelback2snake(k): v for k, v in sec_context_base.items()}
         if not sec_context.get("run_as_non_root"):
             sec_context["run_as_non_root"] = True
-        _tests_services = {'integrationTests'}
-        _default_uid = 1000 if name in _tests_services else 1005000
-        if sec_context.get("run_as_user") is None:
-            sec_context["run_as_user"] = _default_uid
-        if sec_context.get("run_as_group") is None:
-            sec_context["run_as_group"] = _default_uid
-        if sec_context.get("fs_group") is None:
-            sec_context["fs_group"] = _default_uid
 
         if sec_context.get("seccomp_profile"):
             profile = sec_context.get("seccomp_profile").get("type")
