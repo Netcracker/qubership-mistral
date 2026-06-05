@@ -755,8 +755,7 @@ Test Hardcoded Images
 
 Test Container Hardening
     [Tags]    mistral_container_hardening    mistral
-    ${part_of}=       Create List    mistral    mistral-services
+    ${part_of}=       Create List    mistral
     ${exclusions}=    Create Dictionary
     ...    _all=CH12
-    ...    ${MISTRAL_SERVICE_NAME}-db=CH4
     Check Container Hardening    ${part_of}    ${KUBERNETES_NAMESPACE }    ${exclusions}
