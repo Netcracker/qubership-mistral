@@ -54,6 +54,7 @@ RUN chmod +x /entrypoint.sh
 USER 1000:0
 
 ENTRYPOINT ["/entrypoint.sh"]
+CMD ["run-robot"]
 
 # Expose the port
 EXPOSE 8080
