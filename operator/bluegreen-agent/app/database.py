@@ -8,7 +8,7 @@ LOG = get_logger(__name__)
 
 
 async def create_db_pool():
-    LOG.info('Configuring DB connection')
+    LOG.info('Configuring DB connection:%s',PG_USER)
     return await asyncpg.create_pool(
         host=PG_HOST,
         port=PG_PORT,
