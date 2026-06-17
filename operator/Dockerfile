@@ -38,6 +38,7 @@ RUN pip install --no-cache-dir --upgrade pip==25.3 wheel && \
 COPY src/handler.py ${WORKDIR}
 COPY src/mistral_constants.py ${WORKDIR}
 COPY src/kubernetes_helper.py ${WORKDIR}
+COPY src/dbaas_helper.py ${WORKDIR}
 COPY src/rabbitmq_helper.py ${WORKDIR}
 COPY src/liveness_probe.sh ${WORKDIR}
 

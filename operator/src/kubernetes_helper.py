@@ -26,6 +26,7 @@ from kubernetes.client import V1ObjectMeta, V1EnvVar, V1Container, V1PodSpec, \
 
 import mistral_constants as MC
 from rabbitmq_helper import RabbitMQHelper
+from dbaas_helper import DBaaSHelper
 
 logging.basicConfig(
     filename='/proc/1/fd/1',
@@ -1753,6 +1754,7 @@ class KubernetesHelper:
             'default-project-id': str(configmap.get('defaultProjectId', '')),
             'dbaas-agent-url': str(configmap['dbaas']['agentUrl']),
             'dbaas-aggregator-url': str(configmap['dbaas'].get('aggregatorUrl')),
+            'dbaas-integration-enabled': str(configmap['dbaas'].get('integrationEnabled')),
             'debug-log': str(configmap['debugLog']),
             'external-mistral-url': str(configmap.get('externalMistralUrl')),
             'guaranteed-notifier-enabled':
@@ -1894,6 +1896,11 @@ class KubernetesHelper:
             logger.info("Waiting until old update db job deleted")
             sleep(3)
         self.apply_update_db_job()
+        if self.is_dbaas_integration_enabled():
+            if self.get_db_by_db_name() is not None:
+                logger.info("DBaaS: database already registered, skipping registration and migration")
+                return
+            self.register_and_migrate_db()
 
     def cleanup_job(self):
         delopt = V1DeleteOptions(propagation_policy='Background',
@@ -2076,6 +2083,23 @@ class KubernetesHelper:
                         name=MC.COMMON_CONFIGMAP))),
              self._get_pythondontwritebytecode_env(),
              self._get_config_redirect_env(),
+            V1EnvVar(
+                name='DBAAS_INTEGRATION_ENABLED',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='dbaas-integration-enabled',
+                        name=MC.COMMON_CONFIGMAP))),
+            V1EnvVar(
+                name='DBAAS_AGGREGATOR_URL',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='dbaas-aggregator-url',
+                        name=MC.COMMON_CONFIGMAP))),
+            V1EnvVar(
+                name='NAMESPACE',
+                value_from=V1EnvVarSource(
+                    field_ref=V1ObjectFieldSelector(
+                        field_path='metadata.namespace'))),
         ]
 
         if self.tls_enabled():
@@ -2159,6 +2183,64 @@ class KubernetesHelper:
         dr_mode = str(((spec.get('disasterRecovery') or {})
                        .get('mode') or '')).strip().lower()
         return dr_mode != 'standby'
+
+    def is_dbaas_integration_enabled(self):
+        spec = self._spec or {}
+        mistral_params = spec.get('mistralCommonParams') or {}
+        dbaas_params = mistral_params.get('dbaas') or {}
+        flag_value = dbaas_params.get('integrationEnabled', 'False')
+        return str(flag_value).lower() == 'true'
+
+    def get_dbaas_helper(self):
+        dbaas_params = self._spec['mistralCommonParams']['dbaas']
+        aggregator_url = dbaas_params['aggregatorUrl']
+        mistral_secret = self._v1_apps_api.read_namespaced_secret(
+            MC.MISTRAL_SECRET, self._workspace
+        )
+        secret_data = mistral_secret.data
+        dbaas_user = self.decode_secret(secret_data['dbaas-user'])
+        dbaas_password = self.decode_secret(secret_data['dbaas-password'])
+        return DBaaSHelper(
+            aggregator_url=aggregator_url,
+            dbaas_user=dbaas_user,
+            dbaas_password=dbaas_password,
+            namespace=self._workspace,
+        )
+
+    def get_db_by_db_name(self):
+        helper = self.get_dbaas_helper()
+        db_name= self._spec['mistralCommonParams']['postgres']['dbName']
+        return helper.get_db_by_db_name(db_name)
+
+    def register_and_migrate_db(self):
+        helper = self.get_dbaas_helper()
+        common_params = self._spec['mistralCommonParams']
+        pg_params = common_params['postgres']
+        mistral_secret = self._v1_apps_api.read_namespaced_secret(
+            MC.MISTRAL_SECRET, self._workspace
+        )
+        secret_data = mistral_secret.data
+        pg_user = self.decode_secret(secret_data['pg-user'])
+        pg_password = self.decode_secret(secret_data['pg-password'])
+        pg_host = pg_params['host'].removesuffix(".svc")
+
+        logger.info("DBaaS: registering external database")
+        registration = helper.register_external_db(
+            pg_host=pg_host,
+            pg_port=pg_params['port'],
+            pg_db_name=pg_params['dbName'],
+            pg_user=pg_user,
+            pg_password=pg_password,
+        )
+
+        logger.info("DBaaS: migrating database to internal")
+        helper.migrate_external_to_internal(
+            pg_host=pg_host,
+            pg_port=pg_params['port'],
+            pg_db_name=pg_params['dbName'],
+            pg_user=pg_user,
+            pg_password=pg_password,
+        )
 
     def integration_tests_enabled(self):
         enabled = self._spec['integrationTests']['enabled']
