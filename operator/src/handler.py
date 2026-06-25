@@ -94,7 +94,16 @@ def on_create(body, meta, spec, status, **kwargs):
         if not kub_helper.check_if_rmq_exchange_durable():
             kub_helper.scale_down_mistral_deployments()
             kub_helper.delete_existing_queues()
-        kub_helper.update_db_job()
+        if kub_helper.is_dbaas_integration_enabled():
+            conn_props = kub_helper.sync_db_connection_from_dbaas()
+            drift = kub_helper._detect_drift(conn_props)
+            if drift:
+                patch_pg_props_and_run_update_db_job(spec,conn_props)
+            else:
+                logger.info("DBaaS: no drift detected")
+                kub_helper.update_db_job()
+        else:
+            kub_helper.update_db_job()
         for service in MC.MISTRAL_SERVICES:
             if kub_helper.is_deployment_present(service):
                 kub_helper.update_deployment(
@@ -196,7 +205,16 @@ def on_update(body, meta, spec, status, old, new, diff, **kwargs):
             check_if_mistral_scale_down_needed(kub_helper, diff):
             kub_helper.scale_down_mistral_deployments()
             kub_helper.delete_existing_queues()
-        kub_helper.update_db_job()
+        if kub_helper.is_dbaas_integration_enabled():
+            conn_props = kub_helper.sync_db_connection_from_dbaas()
+            drift = kub_helper._detect_drift(conn_props)
+            if drift:
+                patch_pg_props_and_run_update_db_job(spec,conn_props)
+            else:
+                logger.info("DBaaS: no drift detected")
+                kub_helper.update_db_job()
+        else:
+            kub_helper.update_db_job()
         for service in MC.MISTRAL_SERVICES:
             if kub_helper.is_deployment_present(service):
                 kub_helper.update_deployment(
@@ -278,3 +296,21 @@ def set_disaster_recovery_state(spec, status, namespace, diff, **kwargs):
     kub_helper.update_disaster_recovery_status(mode=mode, status=status,
                                                message=message)
     logger.info("Switchover finished successfully")
+
+def patch_pg_props_and_run_update_db_job(spec, conn_props):
+    kub_helper = KubernetesHelper(spec)
+
+    deployments_exist = any(
+        kub_helper.is_deployment_present(svc) for svc in MC.MISTRAL_SERVICES
+    )
+    if deployments_exist:
+        logger.info("DBaaS: drift detected, scaling down before patching credentials")
+        kub_helper.scale_down_mistral_deployments()
+        kub_helper._patch_pg_properties(conn_props)
+        kub_helper.update_db_job()
+        kub_helper.scale_up_mistral_deployments()
+        return
+
+    logger.info("DBaaS: drift detected but no deployments exist yet, patching credentials only")
+    kub_helper._patch_pg_properties(conn_props)
+    kub_helper.update_db_job()

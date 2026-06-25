@@ -358,6 +358,9 @@ class KubernetesHelper:
         if self.tls_enabled():
             envs.extend(self.get_tls_envs())
 
+        if self.is_dbaas_integration_enabled():
+            envs.append(V1EnvVar(name='DBAAS_MODE', value='True'))
+
         volumes.append(self._get_mistralsecret_volume())
         volume_mounts.append(self._get_mistralsecret_volume_mount())
 
@@ -1896,11 +1899,6 @@ class KubernetesHelper:
             logger.info("Waiting until old update db job deleted")
             sleep(3)
         self.apply_update_db_job()
-        if self.is_dbaas_integration_enabled():
-            if self.get_db_by_db_name() is not None:
-                logger.info("DBaaS: database already registered, skipping registration and migration")
-                return
-            self.register_and_migrate_db()
 
     def cleanup_job(self):
         delopt = V1DeleteOptions(propagation_policy='Background',
@@ -2207,12 +2205,83 @@ class KubernetesHelper:
             namespace=self._workspace,
         )
 
-    def get_db_by_db_name(self):
-        helper = self.get_dbaas_helper()
-        db_name= self._spec['mistralCommonParams']['postgres']['dbName']
-        return helper.get_db_by_db_name(db_name)
 
-    def register_and_migrate_db(self):
+    def _read_pg_props(self):
+        mistral_secret = self._v1_apps_api.read_namespaced_secret(
+            MC.MISTRAL_SECRET, self._workspace
+        )
+        secret_data = mistral_secret.data
+        pg_user = self.decode_secret(secret_data['pg-user'])
+        pg_password = self.decode_secret(secret_data['pg-password'])
+        cm = self._v1_apps_api.read_namespaced_config_map(
+            MC.COMMON_CONFIGMAP, self._workspace
+        )
+        cm_data = cm.data
+        pg_host = cm_data['pg-host']
+        pg_port = cm_data['pg-port']
+        pg_db_name = cm_data['pg-db-name']
+        return pg_user, pg_password, pg_host, pg_port, pg_db_name
+
+    def _probe_physical_db_has_data(self, pg_host, pg_port, pg_db_name,
+                                     pg_user, pg_password) -> bool:
+        import psycopg2
+        try:
+            conn = psycopg2.connect(
+                host=pg_host, port=int(pg_port), dbname=pg_db_name,
+                user=pg_user, password=pg_password, connect_timeout=5
+            )
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = 'public'"
+            )
+            count = cur.fetchone()[0]
+            conn.close()
+            return count > 0
+        except Exception as e:
+            logger.warning("DBaaS: physical DB probe failed: %s", e)
+            return False
+
+    def _detect_drift(self, conn_props: dict) -> bool:
+        try:
+            pg_user, pg_password, pg_host, pg_port, pg_db_name = \
+                self._read_pg_props()
+        except Exception as e:
+            logger.warning("DBaaS: drift check could not read current creds: %s", e)
+            return True
+        return (
+            conn_props.get('host') != pg_host.removesuffix(".svc")
+            or str(conn_props.get('port', '')) != str(pg_port)
+            or conn_props.get('name') != pg_db_name
+            or conn_props.get('username') != pg_user
+            or conn_props.get('password') != pg_password
+        )
+
+    def _patch_pg_properties(self, conn_props: dict):
+        logger.info("DBaaS: patching pg credentials in Secret and ConfigMap")
+        self._v1_apps_api.patch_namespaced_secret(
+            name=MC.MISTRAL_SECRET,
+            namespace=self._workspace,
+            body={'data': {
+                'pg-user': base64.b64encode(
+                    conn_props['username'].encode('utf-8')
+                ).decode('utf-8'),
+                'pg-password': base64.b64encode(
+                    conn_props['password'].encode('utf-8')
+                ).decode('utf-8'),
+            }}
+        )
+        self._v1_apps_api.patch_namespaced_config_map(
+            name=MC.COMMON_CONFIGMAP,
+            namespace=self._workspace,
+            body={'data': {
+                'pg-host': conn_props['host'],
+                'pg-port': str(conn_props['port']),
+                'pg-db-name': conn_props['name'],
+            }}
+        )
+
+    def sync_db_connection_from_dbaas(self) -> dict:
         helper = self.get_dbaas_helper()
         common_params = self._spec['mistralCommonParams']
         pg_params = common_params['postgres']
@@ -2223,24 +2292,51 @@ class KubernetesHelper:
         pg_user = self.decode_secret(secret_data['pg-user'])
         pg_password = self.decode_secret(secret_data['pg-password'])
         pg_host = pg_params['host'].removesuffix(".svc")
+        pg_port = pg_params['port']
+        pg_db_name = pg_params['dbName']
 
-        logger.info("DBaaS: registering external database")
-        registration = helper.register_external_db(
-            pg_host=pg_host,
-            pg_port=pg_params['port'],
-            pg_db_name=pg_params['dbName'],
-            pg_user=pg_user,
-            pg_password=pg_password,
-        )
+        result = helper.get_by_classifier()
 
-        logger.info("DBaaS: migrating database to internal")
-        helper.migrate_external_to_internal(
-            pg_host=pg_host,
-            pg_port=pg_params['port'],
-            pg_db_name=pg_params['dbName'],
-            pg_user=pg_user,
-            pg_password=pg_password,
-        )
+        if result is not None:
+            if not result.get('externallyManageable', True):
+                # Branch A: already internal/managed by DBaaS
+                logger.info("DBaaS: database is internally managed, using returned connection")
+                return result['connectionProperties']
+            else:
+                # Branch B: found in DBaaS but still external — migrate
+                logger.info("DBaaS: database is external, migrating to internal")
+                helper.migrate_external_to_internal(
+                    pg_host=pg_host, pg_port=pg_port,
+                    pg_db_name=pg_db_name,
+                    pg_user=pg_user, pg_password=pg_password,
+                )
+                result2 = helper.get_by_classifier()
+                return result2['connectionProperties']
+        else:
+            # Branch C: not in DBaaS at all — probe physical DB
+            has_data = self._probe_physical_db_has_data(
+                pg_host, pg_port, pg_db_name, pg_user, pg_password
+            )
+            if has_data:
+                # C1: legacy manual DB exists — adopt, do NOT create
+                logger.info("DBaaS: legacy DB detected, registering and migrating")
+                helper.register_external_db(
+                    pg_host=pg_host, pg_port=pg_port,
+                    pg_db_name=pg_db_name,
+                    pg_user=pg_user, pg_password=pg_password,
+                )
+                helper.migrate_external_to_internal(
+                    pg_host=pg_host, pg_port=pg_port,
+                    pg_db_name=pg_db_name,
+                    pg_user=pg_user, pg_password=pg_password,
+                )
+                result3 = helper.get_by_classifier()
+                return result3['connectionProperties']
+            else:
+                # C2: true greenfield — let DBaaS create DB + user
+                logger.info("DBaaS: no DB found, creating new database via DBaaS")
+                result4 = helper.create_db()
+                return result4['connectionProperties']
 
     def integration_tests_enabled(self):
         enabled = self._spec['integrationTests']['enabled']

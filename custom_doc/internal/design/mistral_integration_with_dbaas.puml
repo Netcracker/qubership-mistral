@@ -12,7 +12,7 @@ entity "Mistral Secret" as MS
 collections "Mistral Services" as MSVC
 
 note across
-  Mistral integrated with DBaaS (mistralCommonParams.dbaas.enabled=true):
+  Mistral integrated with DBaaS (mistralCommonParams.dbaas.integrationEnabled=true):
   - DBaaS is the SOURCE OF TRUTH for DB connection + credentials.
   - Secret + CM are a read cache. Operator is PULL-ONLY
   - Credentials are NEVER changed by editing the Secret; they change in DBaaS
