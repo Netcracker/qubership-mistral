@@ -5,6 +5,8 @@ DBaaS REST API client for database lifecycle management.
 import logging
 import requests
 
+from pg_connection import PgConnectionInfo
+
 logger = logging.getLogger(__name__)
 
 _MICROSERVICE_NAME = "mistral-operator"
@@ -34,7 +36,6 @@ class DBaaSHelper:
             "originService": _MICROSERVICE_NAME,
         }
         resp = requests.post(url, json=body, auth=self._auth)
-        logger.info("response of get_by_classifier: %s %s", resp.status_code, resp.text)
         if resp.status_code == 404:
             return None
         if resp.status_code == 200:
@@ -58,26 +59,26 @@ class DBaaSHelper:
         logger.error("DBaaS create_db failed: %s %s", resp.status_code, resp.text)
         resp.raise_for_status()
 
-    def register_external_db(self, pg_host, pg_port, pg_db_name, pg_user, pg_password):
+    def register_external_db(self, pg:PgConnectionInfo):
         url = (
             f"{self._base}/api/v3/dbaas/{self._namespace}"
             "/databases/registration/externally_manageable"
         )
-        connection_url = f"jdbc:postgresql://{pg_host}:{pg_port}/{pg_db_name}"
+        connection_url = f"jdbc:postgresql://{pg.host}:{pg.port}/{pg.db_name}"
         body = {
             "classifier": self._classifier(),
             "connectionProperties": [
                 {
-                    "host": pg_host,
-                    "port": str(pg_port),
+                    "host": pg.host,
+                    "port": pg.port,
                     "url": connection_url,
                     "role": "admin",
-                    "name": pg_db_name,
-                    "username": pg_user,
-                    "password": pg_password,
+                    "name": pg.db_name,
+                    "username": pg.user,
+                    "password": pg.password,
                 }
             ],
-            "dbName": pg_db_name,
+            "dbName": pg.db_name,
             "type": _DB_TYPE,
             "updateConnectionProperties": False,
         }
@@ -91,32 +92,32 @@ class DBaaSHelper:
         resp.raise_for_status()
 
     def migrate_external_to_internal(
-        self, pg_host, pg_port, pg_db_name, pg_user, pg_password
+        self, pg:PgConnectionInfo
     ):
         url = f"{self._base}/api/v3/dbaas/migration/databases"
-        connection_url = f"jdbc:postgresql://{pg_host}:{pg_port}/{pg_db_name}"
+        connection_url = f"jdbc:postgresql://{pg.host}:{pg.port}/{pg.db_name}"
         body = [
             {
                 "backupDisabled": False,
                 "classifier": self._classifier(),
                 "connectionProperties": [
                     {
-                        "host": pg_host,
-                        "port": pg_port,
+                        "host": pg.host,
+                        "port": pg.port,
                         "url": connection_url,
                         "role": "admin",
-                        "name": pg_db_name,
-                        "username": pg_user,
-                        "password": pg_password,
+                        "name": pg.db_name,
+                        "username": pg.user,
+                        "password": pg.password,
                     }
                 ],
-                "name": pg_db_name,
+                "name": pg.db_name,
                 "namespace": self._namespace,
-                "dbHost": pg_host,
+                "dbHost": pg.host,
                 "resources": [
                     {
                         "kind": "user",
-                        "name": pg_user,
+                        "name": pg.user,
                     }
                 ],
                 "type": _DB_TYPE,

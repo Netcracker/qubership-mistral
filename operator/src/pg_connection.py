@@ -1,0 +1,14 @@
+"""
+PostgreSQL connection parameters.
+"""
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class PgConnectionInfo:
+    host: str
+    port: int
+    db_name: str
+    user: str
+    password: str

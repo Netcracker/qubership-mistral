@@ -449,6 +449,43 @@ The Kafka Notification parameters used for the configurations are specified in t
 |secrets.kafkaSaslPlainUsername|string|no|'username'|This parameter specifies the Kafka username.|
 |secrets.kafkaSaslPlainPassword|string|no|'password'|This parameter specifies the Kafka password.|
 
+## DBaaS Integration Parameters
+
+Mistral Operator supports the **Database-as-a-Service (DBaaS)** platform as the source of truth for PostgreSQL connection details and credentials. When enabled, the operator synchronizes credentials from DBaaS on every reconcile instead of relying solely on the values in `mistral-secret`.
+
+The DBaaS integration parameters used for the configurations are specified in the following table.
+
+|Parameter|Type|Mandatory|Default value|Description|
+|---|---|---|---|---|
+|mistralCommonParams.dbaas.integrationEnabled|bool|no|`False`|Enables DBaaS integration. When `True`, the operator synchronizes PostgreSQL connection properties from the DBaaS aggregator on every CR create/update.|
+|mistralCommonParams.dbaas.aggregatorUrl|string|no|`http://dbaas-aggregator.dbaas:8080`|URL of the DBaaS aggregator service.|
+|secrets.dbaasUser|string|no|`cluster-dba`|Username used by the operator to authenticate against the DBaaS API.|
+|secrets.dbaasPassword|string|no|`''`|Password for `dbaasUser`.|
+
+**Note:** When `integrationEnabled=True` the operator automatically patches `mistral-secret` (`pg-user`, `pg-password`) and `mistral-common-params` (`pg-host`, `pg-port`, `pg-db-name`) with the values returned by DBaaS whenever it detects a drift. This process includes a scale-down/scale-up cycle to avoid stale connections.
+
+### Credential sync behaviour
+
+| Scenario | DBaaS state | Physical DB | What the operator does |
+|---|---|---|---|
+| A | Registered, DBaaS-managed | — | Uses the returned `connectionProperties` directly |
+| B | Registered, still external | — | Migrates to internally-managed, re-queries |
+| C1 | Not registered | exists (legacy install) | Registers external DB, migrates to internal |
+| C2 | Not registered | Empty  | Creates a new managed DB via DBaaS |
+
+### Example configuration
+
+```yaml
+mistralCommonParams:
+  dbaas:
+    aggregatorUrl: "http://dbaas-aggregator.dbaas:8080"
+    integrationEnabled: "True"
+
+secrets:
+  dbaasUser: "cluster-dba"
+  dbaasPassword: "<password>"
+```
+
 ## Horizontal Pod Autoscalers Parameters
 
 The Horizontal Pod Autoscalers parameters are as follows:
