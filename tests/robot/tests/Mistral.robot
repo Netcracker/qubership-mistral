@@ -822,10 +822,9 @@ DBaaS PG Credentials And Properties Are In Sync
     ...    msg=pg-user in Secret does not match DBaaS username
     Should Be Equal    ${pg_password}    ${conn['password']}
     ...    msg=pg-password in Secret does not match DBaaS password
-    Should Be Equal    ${cm.data['pg-host']}     ${conn['host']}
+    Should Be Equal    ${cm.data['pg-host'].removesuffix('.svc')}     ${conn['host']}
     ...    msg=pg-host in ConfigMap does not match DBaaS host
-    ${pg_port}=    Convert To String    ${conn['port']}
-    Should Be Equal    ${cm.data['pg-port']}     ${pg_port}
+    Should Be Equal As Integers    ${cm.data['pg-port']}     ${conn['port']}
     ...    msg=pg-port in ConfigMap does not match DBaaS port
     Should Be Equal    ${cm.data['pg-db-name']}  ${conn['name']}
     ...    msg=pg-db-name in ConfigMap does not match DBaaS name

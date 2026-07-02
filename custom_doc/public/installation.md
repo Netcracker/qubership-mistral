@@ -451,13 +451,13 @@ The Kafka Notification parameters used for the configurations are specified in t
 
 ## DBaaS Integration Parameters
 
-Mistral Operator supports the **Database-as-a-Service (DBaaS)** platform as the source of truth for PostgreSQL connection details and credentials. When enabled, the operator synchronizes credentials from DBaaS on every reconcile instead of relying solely on the values in `mistral-secret`.
+Mistral Operator supports the **Database-as-a-Service (DBaaS)** platform as the source of truth for PostgreSQL connection details and credentials. When enabled, the operator synchronizes db connection properties from DBaaS on every reconcile.
 
 The DBaaS integration parameters used for the configurations are specified in the following table.
 
 |Parameter|Type|Mandatory|Default value|Description|
 |---|---|---|---|---|
-|mistralCommonParams.dbaas.integrationEnabled|bool|no|`False`|Enables DBaaS integration. When `True`, the operator synchronizes PostgreSQL connection properties from the DBaaS aggregator on every CR create/update.|
+|mistralCommonParams.dbaas.integrationEnabled|bool|no|`False`|Enables DBaaS integration. When `True`, the operator synchronizes PostgreSQL connection properties from the DBaaS.|
 |mistralCommonParams.dbaas.aggregatorUrl|string|no|`http://dbaas-aggregator.dbaas:8080`|URL of the DBaaS aggregator service.|
 |secrets.dbaasUser|string|no|`cluster-dba`|Username used by the operator to authenticate against the DBaaS API.|
 |secrets.dbaasPassword|string|no|`''`|Password for `dbaasUser`.|

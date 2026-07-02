@@ -2168,10 +2168,9 @@ class KubernetesHelper:
 
     def is_dbaas_integration_enabled(self):
         spec = self._spec or {}
-        mistral_params = spec.get('mistralCommonParams') or {}
-        dbaas_params = mistral_params.get('dbaas') or {}
-        flag_value = dbaas_params.get('integrationEnabled', 'False')
-        return str(flag_value).lower() == 'true'
+        return bool(((spec.get('mistralCommonParams') or {})
+                    .get('dbaas') or {})
+                    .get('integrationEnabled', False))
 
     def get_dbaas_helper(self):
         dbaas_params = self._spec['mistralCommonParams']['dbaas']
@@ -2202,7 +2201,7 @@ class KubernetesHelper:
         )
         cm_data = cm.data
         pg_host = cm_data['pg-host'].removesuffix(".svc")
-        pg_port = cm_data['pg-port']
+        pg_port = str(cm_data['pg-port'])
         pg_db_name = cm_data['pg-db-name']
         return PgConnectionInfo(
             host=pg_host,
@@ -2213,11 +2212,11 @@ class KubernetesHelper:
         )
 
 
-    def _probe_physical_db_has_data(self, pg:PgConnectionInfo) -> bool:
+    def _mistral_db_has_data(self, pg:PgConnectionInfo) -> bool:
         import psycopg2
         try:
             conn = psycopg2.connect(
-                host=pg.host, port=int(pg.port), dbname=pg.db_name,
+                host=pg.host, port=pg.port, dbname=pg.db_name,
                 user=pg.user, password=pg.password, connect_timeout=5
             )
             cur = conn.cursor()
@@ -2232,31 +2231,25 @@ class KubernetesHelper:
             logger.warning("DBaaS: physical DB probe failed: %s", e)
             return False
 
-    def _detect_drift(self, conn_props: dict) -> bool:
+    def _detect_drift(self, dbaas_pg: PgConnectionInfo) -> bool:
         try:
             pg = self._read_pg_props()
         except Exception as e:
             logger.warning("DBaaS: drift check could not read current creds: %s", e)
             return True
-        return (
-            conn_props.get('host') != pg.host
-            or str(conn_props.get('port', '')) != str(pg.port)
-            or conn_props.get('name') != pg.db_name
-            or conn_props.get('username') != pg.user
-            or conn_props.get('password') != pg.password
-        )
+        return dbaas_pg != pg
 
-    def _patch_pg_properties(self, conn_props: dict):
+    def _patch_pg_properties(self, pg: PgConnectionInfo):
         logger.info("DBaaS: patching pg credentials in Secret and ConfigMap")
         self._v1_apps_api.patch_namespaced_secret(
             name=MC.MISTRAL_SECRET,
             namespace=self._workspace,
             body={'data': {
                 'pg-user': base64.b64encode(
-                    conn_props['username'].encode('utf-8')
+                    pg.user.encode('utf-8')
                 ).decode('utf-8'),
                 'pg-password': base64.b64encode(
-                    conn_props['password'].encode('utf-8')
+                    pg.password.encode('utf-8')
                 ).decode('utf-8'),
             }}
         )
@@ -2264,41 +2257,19 @@ class KubernetesHelper:
             name=MC.COMMON_CONFIGMAP,
             namespace=self._workspace,
             body={'data': {
-                'pg-host': conn_props['host'],
-                'pg-port': str(conn_props['port']),
-                'pg-db-name': conn_props['name'],
+                'pg-host': pg.host,
+                'pg-port': pg.port,
+                'pg-db-name': pg.db_name,
             }}
         )
 
-    def patch_pg_props_and_run_update_db_job(self, spec, conn_props):
-        deployments_exist = any(
-            self.is_deployment_present(svc) for svc in MC.MISTRAL_SERVICES
-        )
-        if deployments_exist:
-            logger.info("DBaaS: drift detected, scaling down before patching credentials")
-            self.scale_down_mistral_deployments()
-            self._patch_pg_properties(conn_props)
-            self.update_db_job()
-            self.scale_up_mistral_deployments()
-            return
+    def resolve_db_connection_from_dbaas(self):
+        dbaas_pg = self.ensure_dbaas_managed_connection()
+        drift = self._detect_drift(dbaas_pg)
+        if drift:
+            self._patch_pg_properties(dbaas_pg)
 
-        logger.info("DBaaS: drift detected but no deployments exist yet, patching credentials only")
-        self._patch_pg_properties(conn_props)
-        self.update_db_job()
-
-    def reconcile_db(self, spec):
-        if self.is_dbaas_integration_enabled():
-            conn_props = self.sync_db_connection_from_dbaas()
-            drift = self._detect_drift(conn_props)
-            if drift:
-                self.patch_pg_props_and_run_update_db_job(spec, conn_props)
-            else:
-                logger.info("DBaaS: no drift detected")
-                self.update_db_job()
-        else:
-            self.update_db_job()
-
-    def sync_db_connection_from_dbaas(self) -> dict:
+    def ensure_dbaas_managed_connection(self) -> PgConnectionInfo:
         helper = self.get_dbaas_helper()
         pg = self._read_pg_props()
 
@@ -2308,28 +2279,28 @@ class KubernetesHelper:
             if not result.get('externallyManageable', True):
                 # Branch A: already internal/managed by DBaaS
                 logger.info("DBaaS: database is internally managed, using returned connection")
-                return result['connectionProperties']
+                return PgConnectionInfo.from_dbaas_dict(result['connectionProperties'])
             else:
                 # Branch B: found in DBaaS but still external — migrate
                 logger.info("DBaaS: database is external, migrating to internal")
                 helper.migrate_external_to_internal(pg)
                 result2 = helper.get_by_classifier()
-                return result2['connectionProperties']
+                return PgConnectionInfo.from_dbaas_dict(result2['connectionProperties'])
         else:
             # Branch C: not in DBaaS at all — probe physical DB
-            has_data = self._probe_physical_db_has_data(pg)
+            has_data = self._mistral_db_has_data(pg)
             if has_data:
                 # C1: legacy manual DB exists — adopt, do NOT create
                 logger.info("DBaaS: legacy DB detected, registering and migrating")
                 helper.register_external_db(pg)
                 helper.migrate_external_to_internal(pg)
                 result3 = helper.get_by_classifier()
-                return result3['connectionProperties']
+                return PgConnectionInfo.from_dbaas_dict(result3['connectionProperties'])
             else:
                 # C2: true greenfield — let DBaaS create DB + user
                 logger.info("DBaaS: no DB found, creating new database via DBaaS")
                 result4 = helper.create_db()
-                return result4['connectionProperties']
+                return PgConnectionInfo.from_dbaas_dict(result4['connectionProperties'])
 
     def integration_tests_enabled(self):
         enabled = self._spec['integrationTests']['enabled']
@@ -2758,6 +2729,28 @@ class KubernetesHelper:
             self._apps_api.create_namespaced_deployment(
                 namespace=self._workspace,
                 body=deployment_body)
+
+    def reconcile_deployments(self):
+        if self.is_dbaas_integration_enabled():
+            self.resolve_db_connection_from_dbaas()
+        self.update_db_job()
+        for service in MC.MISTRAL_SERVICES:
+            if self.is_deployment_present(service):
+                self.update_deployment(
+                    service,
+                    MC.SERVICES_NAME_TO_SERVER[service]
+                )
+            else:
+                self.apply_deployment_config(
+                    service,
+                    MC.SERVICES_NAME_TO_SERVER[service]
+                )
+
+    def create_services(self):
+        if not self.is_service_present(MC.MONITORING_SERVICE):
+            self.create_mistral_monitoring_service()
+        if not self.is_service_present(MC.MISTRAL_SERVICE):
+            self.create_mistral_service()
 
     def is_service_present(self, name):
         services = self._v1_apps_api.list_namespaced_service(
