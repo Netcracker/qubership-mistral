@@ -751,3 +751,20 @@ Test Hardcoded Images
     ${dd_images}=  Get Dd Images From Config Map  tests-config  ${KUBERNETES_NAMESPACE}
     Skip If  '${dd_images}' == '${None}'  There is no deployDescriptor, not possible to check case!
     Compare Images From Resources With Dd  ${dd_images}
+
+Force cancel propagates to sub-workflow tasks
+    [Tags]    basic
+    Recreate the force_cancel_sub_wf workflow
+    Recreate the force_cancel_parent_wf workflow and start
+
+    Wait until the execution will has RUNNING state
+
+    Force cancel execution
+
+    Wait until the execution will has CANCELLED state
+
+    ${SUB_EX}=  Get wf ex by task  task_name=invoke_sub
+    Should be equal  CANCELLED  ${SUB_EX.state}
+
+    ${SLOW_TASK}=  Get task  slow_task  ${SUB_EX.id}
+    Should be equal  ERROR  ${SLOW_TASK.state}
