@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
 import functools
 import json
 import time
@@ -606,6 +607,33 @@ class Mistral(object):
                                      self._mistral_url + "/executions/" +
                                      self._ex_id)
         assert_response(res, [404, 204])
+
+    @error_handler
+    def delete_stuck_executions(self):
+        res = self._security_request(
+            'GET',
+            self._mistral_url +
+            '/executions?state=RUNNING&created_at=lt:' +
+            (datetime.datetime.utcnow() -
+             datetime.timedelta(minutes=5)).isoformat(' ')
+        ).json()
+
+        for execution in res["executions"]:
+            if execution["workflow_namespace"] != self._workflow_namespace:
+                continue
+
+            id = execution["id"]
+            logger.warn(f'Cleaning up stuck execution [id={id}, '
+                       f'workflow_name={execution["workflow_name"]}]')
+
+            try:
+                res = self._security_request(
+                    'DELETE',
+                    self._mistral_url + "/executions/" + id + "?force=true"
+                )
+                assert_response(res, [404, 204])
+            except BaseException as e:
+                logger.error(f'Failed to clean up execution {id}: {e}')
 
     @error_handler
     def delete_existing_executions_by_name(self, name):
