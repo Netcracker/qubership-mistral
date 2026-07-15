@@ -609,13 +609,13 @@ class Mistral(object):
         assert_response(res, [404, 204])
 
     @error_handler
-    def delete_stuck_executions(self):
+    def delete_stuck_executions(self, min_age_minutes=5):
         res = self._security_request(
             'GET',
             self._mistral_url +
             '/executions?state=RUNNING&created_at=lt:' +
             (datetime.datetime.utcnow() -
-             datetime.timedelta(minutes=5)).isoformat(' ')
+             datetime.timedelta(minutes=min_age_minutes)).isoformat(' ')
         ).json()
 
         for execution in res["executions"]:
