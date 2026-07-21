@@ -2228,7 +2228,10 @@ class KubernetesHelper:
             conn.close()
             return count > 0
         except Exception as e:
-            logger.warning("DBaaS: physical DB probe failed: %s", e)
+            logger.warning(
+            "DBaaS: Error connection to Mistral db (host=%s, port=%s, dbname=%s): %s",
+            pg.host, pg.port, pg.db_name, e
+            )
             return False
 
     def _detect_drift(self, dbaas_pg: PgConnectionInfo) -> bool:
@@ -2249,6 +2252,12 @@ class KubernetesHelper:
                     pg.user.encode('utf-8')
                 ).decode('utf-8'),
                 'pg-password': base64.b64encode(
+                    pg.password.encode('utf-8')
+                ).decode('utf-8'),
+                'pg-admin-user': base64.b64encode(
+                    pg.user.encode('utf-8')
+                ).decode('utf-8'),
+                'pg-admin-password': base64.b64encode(
                     pg.password.encode('utf-8')
                 ).decode('utf-8'),
             }}
