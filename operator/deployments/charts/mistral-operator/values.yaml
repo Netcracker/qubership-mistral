@@ -212,7 +212,7 @@ mistralCommonParams:
   osMistralUrl: "http://mistral.mistral:8989/v2"
   postgres:
     dbName: ""
-    host: "pg-patroni.postgresql"
+    host: ""
     port: "5432"
     idleTimeout: "30s"
   kafkaNotifications:

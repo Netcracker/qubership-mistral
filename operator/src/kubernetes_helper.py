@@ -1745,6 +1745,24 @@ class KubernetesHelper:
         logger.info("Robot Tests result Summary: %s", test_status_summary)
         return result
 
+    def _get_existing_configmap_data(self):
+        try:
+            cm = self._v1_apps_api.read_namespaced_config_map(
+                MC.COMMON_CONFIGMAP, self._workspace
+            )
+            return cm.data or {}
+        except client.rest.ApiException as exc:
+            if exc.status == 404:
+                return {}
+            raise
+
+    def _preserve_if_empty(self, key, new_value):
+        existing_data = self._get_existing_configmap_data()
+        new_value = '' if new_value is None else str(new_value)
+        if new_value.strip() in ('', 'None') and existing_data.get(key):
+            return existing_data[key]
+        return new_value
+
     def generate_mistral_common_configmap_body(self):
         metadata = client.V1ObjectMeta(
             name=MC.COMMON_CONFIGMAP,
@@ -1768,8 +1786,8 @@ class KubernetesHelper:
                 str(configmap.get('idpExternalServer', '')),
             'multitenancy-enabled': str(configmap['multitenancyEnabled']),
             'os-mistral-url': str(configmap['osMistralUrl']),
-            'pg-db-name': str(configmap['postgres']['dbName']),
-            'pg-host': str(configmap['postgres']['host']),
+            'pg-db-name': self._preserve_if_empty('pg-db-name', str(configmap.get('postgres', {}).get('dbName', ''))),
+            'pg-host': self._preserve_if_empty('pg-host', str(configmap.get('postgres', {}).get('host', ''))),
             'pg-port': str(configmap['postgres']['port']),
             'pg-idle-timeout': str(configmap['postgres']['idleTimeout']),
             'queue-name-prefix': str(configmap['queueNamePrefix']),
@@ -2196,10 +2214,7 @@ class KubernetesHelper:
         secret_data = mistral_secret.data
         pg_user = self.decode_secret(secret_data['pg-user'])
         pg_password = self.decode_secret(secret_data['pg-password'])
-        cm = self._v1_apps_api.read_namespaced_config_map(
-            MC.COMMON_CONFIGMAP, self._workspace
-        )
-        cm_data = cm.data
+        cm_data = self._get_existing_configmap_data()
         pg_host = cm_data['pg-host'].removesuffix(".svc")
         pg_port = str(cm_data['pg-port'])
         pg_db_name = cm_data['pg-db-name']
@@ -2215,6 +2230,10 @@ class KubernetesHelper:
     def _mistral_db_has_data(self, pg:PgConnectionInfo) -> bool:
         import psycopg2
         try:
+            logger.info(
+            "DBaaS: checking if db exists (host=%s, port=%s, dbname=%s, user=%s)",
+            pg.host, pg.port, pg.db_name, pg.user
+            )
             conn = psycopg2.connect(
                 host=pg.host, port=pg.port, dbname=pg.db_name,
                 user=pg.user, password=pg.password, connect_timeout=5
@@ -2226,10 +2245,11 @@ class KubernetesHelper:
             )
             count = cur.fetchone()[0]
             conn.close()
+            logger.info("DBaaS: schema tables count=%s", count)
             return count > 0
         except Exception as e:
             logger.warning(
-            "DBaaS: Error connection to Mistral db (host=%s, port=%s, dbname=%s): %s",
+            "DBaaS: Error connecting to Mistral db (host=%s, port=%s, dbname=%s): %s",
             pg.host, pg.port, pg.db_name, e
             )
             return False

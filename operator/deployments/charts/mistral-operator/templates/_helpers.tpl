@@ -197,7 +197,8 @@ Postgres password for Mistral.
 Postgres DB name for Mistral
 */}}
 {{- define "mistral.pgDbName" -}}
-  {{- if .Values.mistralCommonParams.postgres.dbName }}
+  {{- $integrationEnabled := toString (default false .Values.mistralCommonParams.dbaas.integrationEnabled) | lower -}}
+  {{- if or .Values.mistralCommonParams.postgres.dbName (eq $integrationEnabled "true") }}
     {{- .Values.mistralCommonParams.postgres.dbName }}
   {{- else -}}
     {{- printf "mistral-%s" .Release.Namespace }}
