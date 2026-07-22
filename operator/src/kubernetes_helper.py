@@ -1745,7 +1745,7 @@ class KubernetesHelper:
         logger.info("Robot Tests result Summary: %s", test_status_summary)
         return result
 
-    def _get_existing_configmap_data(self):
+    def _get_configmap_data(self):
         try:
             cm = self._v1_apps_api.read_namespaced_config_map(
                 MC.COMMON_CONFIGMAP, self._workspace
@@ -1755,13 +1755,6 @@ class KubernetesHelper:
             if exc.status == 404:
                 return {}
             raise
-
-    def _preserve_if_empty(self, key, new_value):
-        existing_data = self._get_existing_configmap_data()
-        new_value = '' if new_value is None else str(new_value)
-        if new_value.strip() in ('', 'None') and existing_data.get(key):
-            return existing_data[key]
-        return new_value
 
     def generate_mistral_common_configmap_body(self):
         metadata = client.V1ObjectMeta(
@@ -1776,7 +1769,7 @@ class KubernetesHelper:
             'default-project-id': str(configmap.get('defaultProjectId', '')),
             'dbaas-agent-url': str(configmap['dbaas']['agentUrl']),
             'dbaas-aggregator-url': str(configmap['dbaas'].get('aggregatorUrl')),
-            'dbaas-integration-enabled': str(configmap['dbaas'].get('integrationEnabled')),
+            'dbaas-integration-enabled': str(configmap['dbaas'].get('integrationEnabled', 'False')),
             'debug-log': str(configmap['debugLog']),
             'external-mistral-url': str(configmap.get('externalMistralUrl')),
             'guaranteed-notifier-enabled':
@@ -1786,8 +1779,8 @@ class KubernetesHelper:
                 str(configmap.get('idpExternalServer', '')),
             'multitenancy-enabled': str(configmap['multitenancyEnabled']),
             'os-mistral-url': str(configmap['osMistralUrl']),
-            'pg-db-name': self._preserve_if_empty('pg-db-name', str(configmap.get('postgres', {}).get('dbName', ''))),
-            'pg-host': self._preserve_if_empty('pg-host', str(configmap.get('postgres', {}).get('host', ''))),
+            'pg-db-name': str(configmap['postgres']['dbName']),
+            'pg-host': str(configmap['postgres']['host']),
             'pg-port': str(configmap['postgres']['port']),
             'pg-idle-timeout': str(configmap['postgres']['idleTimeout']),
             'queue-name-prefix': str(configmap['queueNamePrefix']),
@@ -2098,6 +2091,12 @@ class KubernetesHelper:
                     config_map_key_ref=V1ConfigMapKeySelector(
                         key='queue-name-prefix',
                         name=MC.COMMON_CONFIGMAP))),
+            V1EnvVar(
+                name='DBAAS_INTEGRATION_ENABLED',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='dbaas-integration-enabled',
+                        name=MC.COMMON_CONFIGMAP))),
              self._get_pythondontwritebytecode_env(),
              self._get_config_redirect_env(),
         ]
@@ -2214,7 +2213,7 @@ class KubernetesHelper:
         secret_data = mistral_secret.data
         pg_user = self.decode_secret(secret_data['pg-user'])
         pg_password = self.decode_secret(secret_data['pg-password'])
-        cm_data = self._get_existing_configmap_data()
+        cm_data = self._get_configmap_data()
         pg_host = cm_data['pg-host'].removesuffix(".svc")
         pg_port = str(cm_data['pg-port'])
         pg_db_name = cm_data['pg-db-name']
@@ -2230,10 +2229,6 @@ class KubernetesHelper:
     def _mistral_db_has_data(self, pg:PgConnectionInfo) -> bool:
         import psycopg2
         try:
-            logger.info(
-            "DBaaS: checking if db exists (host=%s, port=%s, dbname=%s, user=%s)",
-            pg.host, pg.port, pg.db_name, pg.user
-            )
             conn = psycopg2.connect(
                 host=pg.host, port=pg.port, dbname=pg.db_name,
                 user=pg.user, password=pg.password, connect_timeout=5
@@ -2245,7 +2240,6 @@ class KubernetesHelper:
             )
             count = cur.fetchone()[0]
             conn.close()
-            logger.info("DBaaS: schema tables count=%s", count)
             return count > 0
         except Exception as e:
             logger.warning(
@@ -2292,13 +2286,18 @@ class KubernetesHelper:
             }}
         )
 
-    def resolve_db_connection_from_dbaas(self):
-        dbaas_pg = self.ensure_dbaas_managed_connection()
-        drift = self._detect_drift(dbaas_pg)
-        if drift:
+    def resolve_db_connection_from_dbaas(self, isCreateEvent=False):
+        dbaas_pg = self.ensure_dbaas_managed_connection(isCreateEvent)
+        mistral_secret = self._v1_apps_api.read_namespaced_secret(
+            MC.MISTRAL_SECRET, self._workspace
+        )
+        secret_data = mistral_secret.data
+        admin_user = self.decode_secret(secret_data["pg-admin-user"])
+        should_be_patched = isCreateEvent or self._detect_drift(dbaas_pg) or (admin_user != dbaas_pg.user)
+        if should_be_patched:
             self._patch_pg_properties(dbaas_pg)
 
-    def ensure_dbaas_managed_connection(self) -> PgConnectionInfo:
+    def ensure_dbaas_managed_connection(self, isCreateEvent=False) -> PgConnectionInfo:
         helper = self.get_dbaas_helper()
         pg = self._read_pg_props()
 
@@ -2317,8 +2316,8 @@ class KubernetesHelper:
                 return PgConnectionInfo.from_dbaas_dict(result2['connectionProperties'])
         else:
             # Branch C: not in DBaaS at all — probe physical DB
-            has_data = self._mistral_db_has_data(pg)
-            if has_data:
+            register_and_migrate  = not(isCreateEvent) and self._mistral_db_has_data(pg)
+            if register_and_migrate:
                 # C1: legacy manual DB exists — adopt, do NOT create
                 logger.info("DBaaS: legacy DB detected, registering and migrating")
                 helper.register_external_db(pg)
@@ -2759,9 +2758,9 @@ class KubernetesHelper:
                 namespace=self._workspace,
                 body=deployment_body)
 
-    def reconcile_deployments(self):
+    def reconcile_deployments(self, isCreateEvent=False):
         if self.is_dbaas_integration_enabled():
-            self.resolve_db_connection_from_dbaas()
+            self.resolve_db_connection_from_dbaas(isCreateEvent)
         self.update_db_job()
         for service in MC.MISTRAL_SERVICES:
             if self.is_deployment_present(service):

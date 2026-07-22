@@ -462,7 +462,45 @@ The DBaaS integration parameters used for the configurations are specified in th
 |secrets.dbaasUser|string|no|`cluster-dba`|Username used by the operator to authenticate against the DBaaS API.|
 |secrets.dbaasPassword|string|no|`''`|Password for `dbaasUser`.|
 
-**Note:** When `integrationEnabled=True` the operator automatically patches `mistral-secret` (`pg-user`, `pg-password`) and `mistral-common-params` (`pg-host`, `pg-port`, `pg-db-name`) with the values returned by DBaaS whenever it detects a drift. This process includes a scale-down/scale-up cycle to avoid stale connections.
+**Without dbaas to with dbaas-Clean Install:** With dbaas integration enabled, dbaas will create fresh db instead of the configured db. Cleanup of legacy db will be skipped in this case. For manually cleaning up the db please refer to [How to Clean Mistral Database](/custom_doc/troubleshooting.md#how-to-clean-mistral-database)
+
+#### Example configuration
+
+```yaml
+mistralCommonParams:
+  dbaas:
+    aggregatorUrl: "http://dbaas-aggregator.dbaas:8080"
+    integrationEnabled: "True"
+
+secrets:
+  dbaasUser: "cluster-dba"
+  dbaasPassword: "<password>"
+```
+
+**Without dbaas to with dbaas-Rolling Update:** With dbaas integration enabled, dbaas will register and migrate the configured db to dbaas internal db if it already exists. Hence, configuring existing pg connection properties is necessary.
+
+#### Example configuration
+
+```yaml
+mistralCommonParams:
+  dbaas:
+    aggregatorUrl: "http://dbaas-aggregator.dbaas:8080"
+    integrationEnabled: "True"
+  postgres:
+    dbName: "<previous_db>"
+    host: "<previous_host>"
+    port: "<previous_port>"
+
+secrets:
+  pgPassword: "<previous_pg_password>"
+  pgUser: "<previous_pg_user>"
+  dbaasUser: "cluster-dba"
+  dbaasPassword: "<password>"
+```
+
+**Note:** When `integrationEnabled=True` the operator automatically patches `mistral-secret` (`pg-user`, `pg-password`,`pg-admin-user`,`pg-admin-password`) and `mistral-common-params` (`pg-host`, `pg-port`, `pg-db-name`) with the values returned by DBaaS whenever it detects a drift.
+
+
 
 ### Credential sync behaviour
 

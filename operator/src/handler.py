@@ -94,7 +94,7 @@ def on_create(body, meta, spec, status, **kwargs):
         if not kub_helper.check_if_rmq_exchange_durable():
             kub_helper.scale_down_mistral_deployments()
             kub_helper.delete_existing_queues()
-        kub_helper.reconcile_deployments()
+        kub_helper.reconcile_deployments(True)
     kub_helper.create_services()
     kub_helper.set_deploy_status_and_run_tests()
 
@@ -182,7 +182,7 @@ def on_update(body, meta, spec, status, old, new, diff, **kwargs):
             check_if_mistral_scale_down_needed(kub_helper, diff):
             kub_helper.scale_down_mistral_deployments()
             kub_helper.delete_existing_queues()
-        kub_helper.reconcile_deployments()
+        kub_helper.reconcile_deployments(False)
     kub_helper.create_services()
     kub_helper.set_deploy_status_and_run_tests()
 
