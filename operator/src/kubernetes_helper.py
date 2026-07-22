@@ -2268,12 +2268,6 @@ class KubernetesHelper:
                 'pg-password': base64.b64encode(
                     pg.password.encode('utf-8')
                 ).decode('utf-8'),
-                'pg-admin-user': base64.b64encode(
-                    pg.user.encode('utf-8')
-                ).decode('utf-8'),
-                'pg-admin-password': base64.b64encode(
-                    pg.password.encode('utf-8')
-                ).decode('utf-8'),
             }}
         )
         self._v1_apps_api.patch_namespaced_config_map(
@@ -2286,18 +2280,13 @@ class KubernetesHelper:
             }}
         )
 
-    def resolve_db_connection_from_dbaas(self, isCreateEvent=False):
-        dbaas_pg = self.ensure_dbaas_managed_connection(isCreateEvent)
-        mistral_secret = self._v1_apps_api.read_namespaced_secret(
-            MC.MISTRAL_SECRET, self._workspace
-        )
-        secret_data = mistral_secret.data
-        admin_user = self.decode_secret(secret_data["pg-admin-user"])
-        should_be_patched = isCreateEvent or self._detect_drift(dbaas_pg) or (admin_user != dbaas_pg.user)
+    def resolve_db_connection_from_dbaas(self, is_create_event=False):
+        dbaas_pg = self.ensure_dbaas_managed_connection(is_create_event)
+        should_be_patched = is_create_event or self._detect_drift(dbaas_pg)
         if should_be_patched:
             self._patch_pg_properties(dbaas_pg)
 
-    def ensure_dbaas_managed_connection(self, isCreateEvent=False) -> PgConnectionInfo:
+    def ensure_dbaas_managed_connection(self, is_create_event=False) -> PgConnectionInfo:
         helper = self.get_dbaas_helper()
         pg = self._read_pg_props()
 
@@ -2316,7 +2305,7 @@ class KubernetesHelper:
                 return PgConnectionInfo.from_dbaas_dict(result2['connectionProperties'])
         else:
             # Branch C: not in DBaaS at all — probe physical DB
-            register_and_migrate  = not(isCreateEvent) and self._mistral_db_has_data(pg)
+            register_and_migrate  = not(is_create_event) and self._mistral_db_has_data(pg)
             if register_and_migrate:
                 # C1: legacy manual DB exists — adopt, do NOT create
                 logger.info("DBaaS: legacy DB detected, registering and migrating")
@@ -2758,9 +2747,9 @@ class KubernetesHelper:
                 namespace=self._workspace,
                 body=deployment_body)
 
-    def reconcile_deployments(self, isCreateEvent=False):
+    def reconcile_deployments(self, is_create_event=False):
         if self.is_dbaas_integration_enabled():
-            self.resolve_db_connection_from_dbaas(isCreateEvent)
+            self.resolve_db_connection_from_dbaas(is_create_event)
         self.update_db_job()
         for service in MC.MISTRAL_SERVICES:
             if self.is_deployment_present(service):

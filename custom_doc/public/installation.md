@@ -462,7 +462,7 @@ The DBaaS integration parameters used for the configurations are specified in th
 |secrets.dbaasUser|string|no|`cluster-dba`|Username used by the operator to authenticate against the DBaaS API.|
 |secrets.dbaasPassword|string|no|`''`|Password for `dbaasUser`.|
 
-**Without dbaas to with dbaas-Clean Install:** With dbaas integration enabled, dbaas will create fresh db instead of the configured db. Cleanup of legacy db will be skipped in this case. For manually cleaning up the db please refer to [How to Clean Mistral Database](/custom_doc/troubleshooting.md#how-to-clean-mistral-database)
+**Without dbaas to with dbaas-Clean Install:** With dbaas integration enabled in clean install mode, dbaas will create fresh db. Cleanup of existing db would be skipped in this case and can be manually done using ```DROP DATABASE IF EXISTS <db_name>```. However, configuring postgres admin credentials are necessary for performing privileged operations on db.
 
 #### Example configuration
 
@@ -473,8 +473,10 @@ mistralCommonParams:
     integrationEnabled: "True"
 
 secrets:
-  dbaasUser: "cluster-dba"
+  pgAdminPassword: "<password>"
+  pgAdminUser: "<pg_admin_user>"
   dbaasPassword: "<password>"
+  dbaasUser: "<dbaas_user>"
 ```
 
 **Without dbaas to with dbaas-Rolling Update:** With dbaas integration enabled, dbaas will register and migrate the configured db to dbaas internal db if it already exists. Hence, configuring existing pg connection properties is necessary.
@@ -492,13 +494,15 @@ mistralCommonParams:
     port: "<previous_port>"
 
 secrets:
+  pgAdminPassword: "<password>"
+  pgAdminUser: "<pg_admin_user>"
   pgPassword: "<previous_pg_password>"
   pgUser: "<previous_pg_user>"
-  dbaasUser: "cluster-dba"
   dbaasPassword: "<password>"
+  dbaasUser: "<dbaas_user>"
 ```
 
-**Note:** When `integrationEnabled=True` the operator automatically patches `mistral-secret` (`pg-user`, `pg-password`,`pg-admin-user`,`pg-admin-password`) and `mistral-common-params` (`pg-host`, `pg-port`, `pg-db-name`) with the values returned by DBaaS whenever it detects a drift.
+**Note:** When `integrationEnabled=True` the operator automatically patches `mistral-secret` (`pg-user`, `pg-password`) and `mistral-common-params` (`pg-host`, `pg-port`, `pg-db-name`) with the values returned by DBaaS whenever it detects a drift.
 
 
 
@@ -520,8 +524,8 @@ mistralCommonParams:
     integrationEnabled: "True"
 
 secrets:
-  dbaasUser: "cluster-dba"
   dbaasPassword: "<password>"
+  dbaasUser: "cluster-dba"
 ```
 
 ## Horizontal Pod Autoscalers Parameters

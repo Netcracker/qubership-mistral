@@ -27,7 +27,7 @@ else
   WHERE datname = '$DB_NAME'
     AND pid <> pg_backend_pid();
 
-  EOF
+EOF
   then
     echo "Closed existing connections to $DB_NAME."
   else
