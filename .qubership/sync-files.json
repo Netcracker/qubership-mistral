@@ -1,6 +1,0 @@
-[
-  {
-    "from": "custom_doc/troubleshooting.md",
-    "to": "agent-packages/troubleshoot-qubership-mistral/.apm/skills/troubleshoot-qubership-mistral/references/troubleshooting.md"
-  }
-]
