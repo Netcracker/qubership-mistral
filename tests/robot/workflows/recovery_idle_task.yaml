@@ -1,0 +1,12 @@
+version: '2.0'
+
+recovery_idle_task:
+  tasks:
+    long_sleep:
+      action: std.sleep seconds=120
+      on-success:
+        - verify_task
+    verify_task:
+      action: std.noop
+      publish:
+        result: recovered_from_idle

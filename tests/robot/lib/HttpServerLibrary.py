@@ -43,6 +43,15 @@ class EchoHandler(web.RequestHandler):
         self.write(self.request.body)
 
 
+class HeadersHandler(web.RequestHandler):
+
+    def get(self):
+        logger.debug('Handle headers query')
+        headers = {k: v for k, v in self.request.headers.items()}
+        self.set_header('Content-Type', 'application/json')
+        self.write(json.dumps({'headers': headers}))
+
+
 class AsyncHandler(web.RequestHandler):
 
     def initialize(self, id_queue, queue):
@@ -190,12 +199,15 @@ class WfRetryNotifyHandler(web.RequestHandler):
         logger.debug(self._data)
 
         if self._is_fail():
-            self._queue.put('error')
+            self._queue.put({'name': '', 'state': 'error'})
 
             self.send_error()
             return
 
-        self._queue.put(self._data['state'])
+        self._queue.put({
+            'name': self._data['name'],
+            'state': self._data['state'],
+        })
 
         self.write("Hello, world")
 
@@ -221,17 +233,18 @@ class HttpServerLibrary(object):
 
         self.id_queue = queue.Queue()
         self.status_queue = queue.Queue()
-        self.queue = queue.PriorityQueue()
+        self.queue = queue.Queue()
         self._thread = threading.Thread(target=self._start_server)
 
         self._thread.setDaemon(True)
         self.launch_server()
         self._counter = 0
-        self._fail_number = 2
+        self._fail_number = 0
 
     def _start_server(self):
         handlers = [(r"/sync", SyncHandler),
                     (r'/echo', EchoHandler),
+                    (r'/headers', HeadersHandler),
                     (r'/async', AsyncHandler, {"id_queue": self.id_queue, "queue": self.queue}),
                     (r'/ha_async', HA_AsyncHandler, {"mistral_url": self._mistral_url}),
                     (r'/oauth2', Oauth2Handler, {"queue": self.queue}),
@@ -273,7 +286,7 @@ class HttpServerLibrary(object):
 
     def clear_events(self):
         self._counter = 0
-        self._fail_number = 2
+        self._fail_number = 0
 
         for q in [self.queue, self.id_queue, self.status_queue]:
             while not q.empty():

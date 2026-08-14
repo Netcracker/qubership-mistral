@@ -1,19 +1,8 @@
 # -*- coding: robot -*-
 
-*** Variables ***
-${OWN_URL}                 %{OWN_URL}
-${AUTH_ENABLE}             %{AUTH_ENABLE}
-${TENANT}                  system
-${WORKFLOW_NAMESPACE}      tests
-${KUBERNETES_NAMESPACE}    %{KUBERNETES_NAMESPACE}
-${MISTRAL_SERVICE_NAME}    %{MISTRAL_HOST}
-${MISTRAL_CR_NAME}         mistral-service
-${MISTRAL_SECRET_NAME}     mistral-secret
-${DBAAS_USER}              %{DBAAS_USER=}
-${DBAAS_PASSWORD}          %{DBAAS_PASSWORD=}
-
-
 *** Settings ***
+Resource  MistralKeywords.robot
+
 Library  BuiltIn
 Library  OperatingSystem
 Library  ../lib/Mistral.py  mistral_url=%{MISTRAL_URL}
@@ -40,101 +29,6 @@ Test Teardown    Wait Until Keyword Succeeds  3 min  5 sec  Run Keywords
 ...          AND    Set maintenance mode  RUNNING
 ...          AND    Take off refuses
 Suite Teardown   Wait Until Keyword Succeeds  3 min  5 sec  Set maintenance mode  RUNNING
-
-
-*** Keywords ***
-DBaaS Integration Is Enabled
-    ${cr}=    Get Custom Resource    netcracker.com/v2    mistralservice
-    ...    ${KUBERNETES_NAMESPACE}    ${MISTRAL_CR_NAME}
-    ${enabled}=    Set Variable    ${cr['spec']['mistralCommonParams']['dbaas']['integrationEnabled']}
-    [Return]    ${enabled}
-
-Get DBaaS Connection Properties
-    ${cr}=    Get Custom Resource    netcracker.com/v2    mistralservice
-    ...    ${KUBERNETES_NAMESPACE}    ${MISTRAL_CR_NAME}
-    ${aggregator_url}=    Set Variable    ${cr['spec']['mistralCommonParams']['dbaas']['aggregatorUrl']}
-    ${auth}=    Create List    ${DBAAS_USER}    ${DBAAS_PASSWORD}
-    ${session}=    Create Session    dbaas    ${aggregator_url}
-    ...    auth=${auth}
-    ${classifier}=    Create Dictionary
-    ...    microserviceName=mistral-operator    scope=service    namespace=${KUBERNETES_NAMESPACE}
-    ${body}=    Create Dictionary    classifier=${classifier}    originService=mistral-operator
-    ${resp}=    POST On Session    dbaas
-    ...    /api/v3/dbaas/${KUBERNETES_NAMESPACE}/databases/get-by-classifier/postgresql
-    ...    json=${body}
-    Should Be Equal As Integers    ${resp.status_code}    200
-    ...    msg=DBaaS get-by-classifier failed: ${resp.text}
-    [Return]    ${resp.json()['connectionProperties']}
-
-Recreate the ${name} workflow
-    delete workflow     ${name}
-    create workflow     ${name}
-
-Recreate the ${name} workflow and start
-    delete workflow     ${name}
-    create workflow     ${name}
-
-    create execution    ${name}
-
-Recreate the ${name} workflow and start with ${input}
-    delete workflow     ${name}
-    create workflow     ${name}
-
-    ${EX}=  create execution    ${name}  ex_input=${input}
-    [Return]  ${EX}
-
-Recreate ${name} workflow and start with input from ${file_name}
-    delete workflow     ${name}
-    create workflow     ${name}
-
-    ${EX}=  create_execution_with_file_input    ${name}  input_file_name=${file_name}
-    [Return]  ${EX}
-
-Recreate the ${name} workflow and start params ${params}
-    delete workflow     ${name}
-    create workflow     ${name}
-
-    create execution    ${name}  params=${params}
-
-Recreate the ${name} workflow, start and wait ${state} state
-    delete workflow     ${name}
-    create workflow     ${name}
-
-    create execution    ${name}
-    Wait until the execution will has ${state} state
-
-Recreate the ${name} workflow, start with ${input} and wait ${state} state
-    delete workflow     ${name}
-    create workflow     ${name}
-
-    create execution    ${name}  ex_input=${input}
-    Wait until the execution will has ${state} state
-
-Recreate the ${name} workflow and starts with ${input} and params ${params}
-    delete workflow     ${name}
-    create workflow     ${name}
-
-    ${EX}=  create execution    ${name}  ex_input=${input}  params=${params}
-
-Recreate the ${name} workbook
-    delete workbook     ${name}
-    create workbook     ${name}
-
-Wait until the execution will has ${state} state
-    wait unit execution will has state  ${state}
-
-${param} of ${name} task must be equal ${value}
-    task param equals   ${name}     ${param}=${value}
-
-Compare Images From Resources With Dd
-    [Arguments]  ${dd_images}
-    ${stripped_resources}=  Strip String  ${dd_images}  characters=,  mode=right
-    @{list_resources} =  Split String	${stripped_resources} 	,
-    FOR  ${resource}  IN  @{list_resources}
-      ${type}  ${name}  ${container_name}  ${image}=  Split String	${resource}
-      ${resource_image}=  Get Resource Image  ${type}  ${name}  ${KUBERNETES_NAMESPACE}  ${container_name}
-      Should Be Equal  ${resource_image}  ${image}
-    END
 
 *** Test Cases ***
 Basic execution is finished successfully
@@ -357,8 +251,11 @@ Webhook plugin sends notification
 
     Recreate the wf_success_notification workflow and start params ${EX_PARAMS}
 
-    ${EX_STATE}=  Await rest
-    Should be equal  SUCCESS  ${EX_STATE}
+    ${NOTIFICATION}=  Await Rest
+    ${name}=  Get From Dictionary  ${NOTIFICATION}  name
+    ${state}=  Get From Dictionary  ${NOTIFICATION}  state
+    Should Be Equal  task1  ${name}
+    Should Be Equal  SUCCESS  ${state}
 
     Wait until the execution will has SUCCESS state
 
@@ -489,7 +386,7 @@ DR pause mode
     Should be equal  RUNNING  ${STATE.status}
 
     # Automaticly resume execution
-    wait unit execution will has state  SUCCESS  attempt=${70}
+    wait until execution has state  SUCCESS  attempt=${70}
 
     Recreate the basic workflow, start and wait SUCCESS state
 
@@ -665,7 +562,7 @@ Mistral heartbeat
 
     Recreate the exit workflow and start
 
-    wait unit execution will has state  state=ERROR  attempt=${48}  wait=${5}
+    wait until execution has state  state=ERROR  attempt=${48}  wait=${5}
 
 Info REST
     [Tags]  basic
@@ -783,7 +680,7 @@ Test Hardcoded Images
     Compare Images From Resources With Dd  ${dd_images}
 
 Test Container Hardening
-    [Tags]    mistral_container_hardening    mistral
+    [Tags]    mistral_container_hardening    mistral    basic
     ${part_of}=       Create List    mistral
     Check Container Hardening    ${part_of}    ${KUBERNETES_NAMESPACE }
 

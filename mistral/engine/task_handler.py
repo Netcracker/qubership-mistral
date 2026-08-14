@@ -495,11 +495,20 @@ def _start_task(task_ex_id, waiting, triggered_by, rerun, reset, first_run):
 @db_utils.retry_on_db_error
 @post_tx_queue.run
 @profiler.trace('task-handler-refresh-task-state', hide_args=True)
-def _refresh_task_state(task_ex_id):
+def _refresh_task_state(task_ex_id, recovery=None):
     with db_api.transaction():
         task_ex = db_api.load_task_execution(task_ex_id)
 
         if not task_ex:
+            return
+
+        # Expired-subworkflow recovery: WORKFLOW task stayed RUNNING without
+        # a child execution — fail it explicitly.
+        if recovery == 'ERROR':
+            if states.is_completed(task_ex.state):
+                return
+            msg = 'Failed to start subworkflow: no subwf for the long time.'
+            force_fail_task(task_ex, msg=msg)
             return
 
         if (states.is_completed(task_ex.state)

@@ -1,0 +1,16 @@
+version: '2.0'
+
+yaql_immutable_input:
+  input:
+    - blabla: {}
+
+  output:
+    blabla_output: "<% $.blabla %>"
+    blabla_input: "<% execution().input.blabla %>"
+
+  tasks:
+    task0:
+      action: std.noop
+      publish:
+        blabla:
+          another_key: "another_value"

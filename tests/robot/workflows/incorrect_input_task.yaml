@@ -1,0 +1,22 @@
+version: '2.0'
+
+inner_wf:
+  input:
+    - a
+    - b
+
+  tasks:
+    task1:
+      action: std.noop
+
+incorrect_input_task:
+  input:
+    - a
+    - b
+
+  tasks:
+    task1:
+      workflow: inner_wf
+      input:
+        a: a
+        c: c

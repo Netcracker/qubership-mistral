@@ -1,0 +1,13 @@
+version: '2.0'
+
+sub_wf_headers:
+  input:
+    - headers_url
+
+  tasks:
+    sub_http_task:
+      action: std.http
+      input:
+        url: <% $.headers_url %>
+      publish:
+        received_headers: <% task(sub_http_task).result.content.headers %>

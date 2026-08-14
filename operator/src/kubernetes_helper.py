@@ -2570,6 +2570,42 @@ class KubernetesHelper:
                     )
                 )
             ),
+            V1EnvVar(
+                name='RABBIT_HOST',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='rabbit-host',
+                        name=MC.COMMON_CONFIGMAP
+                    )
+                )
+            ),
+            V1EnvVar(
+                name='RABBIT_PORT',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='rabbit-port',
+                        name=MC.COMMON_CONFIGMAP
+                    )
+                )
+            ),
+            V1EnvVar(
+                name='RABBIT_VHOST',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='rabbit-vhost',
+                        name=MC.COMMON_CONFIGMAP
+                    )
+                )
+            ),
+            V1EnvVar(
+                name='KAFKA_NOTIFICATIONS_ENABLED',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='kafka-notifications-enabled',
+                        name=MC.COMMON_CONFIGMAP
+                    )
+                )
+            ),
         ]
 
         if tls_enabled and tls_api_enabled:
@@ -2578,6 +2614,10 @@ class KubernetesHelper:
                     V1EnvVar(
                         name='REQUESTS_CA_BUNDLE',
                         value=MC.MISTRAL_TLS_CA_PATH
+                    ),
+                    V1EnvVar(
+                        name='RABBITMQ_TLS_ENABLED',
+                        value=str(self._spec['mistral']['tls']['services']['rabbitmq']['enabled'])
                     )
                 ]
             )

@@ -1,0 +1,22 @@
+version: '2.0'
+
+wf_size_limit_test:
+  description: >
+    Validates execution_field_size_limit_kb on a successful run:
+    publishes a string of configurable length and finishes normally,
+    so the test can check whether the large field gets truncated
+    (or the execution errors out) when the limit is exceeded.
+
+  input:
+    - output_length: 10240
+
+  output:
+    result: <% $.p_var %>
+
+  tasks:
+    big_output_task:
+      action: std.echo
+      input:
+        output: <% range(0, $.output_length).select('A').join('') %>
+      publish:
+        p_var: <% task(big_output_task).result %>

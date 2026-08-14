@@ -28,7 +28,7 @@ Test Teardown    Run Keywords
 Create ${wf_name} workflow by definition ${wf_def}, execute and wait ${seconds} seconds for finish
     create workflow by json definition  ${wf_def}
     create execution    ${wf_name}
-    wait unit execution will has state  SUCCESS  seconds=${seconds}
+    wait until execution has state  SUCCESS  seconds=${seconds}
 
 
 *** Test Cases ***

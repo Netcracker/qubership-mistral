@@ -1,0 +1,95 @@
+version: '2.0'
+
+parallel_publish_merge:
+  type: direct
+  input:
+    - context:
+        A: 1
+        B: 1
+        C: 1
+
+  output:
+    A: <% $.A %>
+    B: <% $.B %>
+    C: <% $.C %>
+    D: <% $.D %>
+    E: <% $.E %>
+    F: <% $.F %>
+
+  tasks:
+    t_l:
+      action: std.noop
+      publish:
+        E: 0
+      on-success:
+        - t_l_0
+
+    t_l_0:
+      action: std.noop
+      publish:
+        E: 1
+      on-success:
+        - t1
+
+    t_r_0:
+      action: std.noop
+      publish:
+        F: 1
+      on-success:
+        - t1
+
+    t1:
+      action: std.noop
+      join: all
+      publish:
+        D: 1
+      on-success:
+        - t_l_1
+        - t_r_1
+
+    t_l_1:
+      action: std.noop
+      publish:
+        A: 2
+      on-success:
+        - t_l_2
+
+    t_l_2:
+      action: std.noop
+      publish:
+        E: 2
+      on-success:
+        - t_j_1
+
+    t_r_1:
+      action: std.noop
+      publish:
+        B: 2
+      on-success:
+        - t_r_2
+
+    t_r_2:
+      action: std.noop
+      publish:
+        F: 2
+      on-success:
+        - t_j_1
+
+    t_j_1:
+      action: std.noop
+      join: all
+      publish:
+        C: 2
+      on-success:
+        - t_l_3
+        - t_r_3
+
+    t_l_3:
+      action: std.noop
+      publish:
+        C: 3
+
+    t_r_3:
+      action: std.noop
+      publish:
+        D: 2

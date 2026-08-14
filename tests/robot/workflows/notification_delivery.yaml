@@ -1,0 +1,10 @@
+version: '2.0'
+
+notification_delivery:
+  tasks:
+    task1:
+      action: std.fail
+      on-error:
+        - task2
+    task2:
+      action: std.noop
