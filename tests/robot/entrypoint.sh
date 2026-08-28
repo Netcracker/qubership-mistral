@@ -26,4 +26,15 @@ export CLIENT_REGISTRATION_TOKEN=$(_read_secret idp-registration-token)
 export DBAAS_USER=$(_read_secret dbaas-user)
 export DBAAS_PASSWORD=$(_read_secret dbaas-password)
 
+export RABBIT_ADMIN_USER=$(_read_secret rabbit-admin-user)
+export RABBIT_ADMIN_PASSWORD=$(_read_secret rabbit-admin-password)
+
+RABBITMQ_TLS_ENABLED="${RABBITMQ_TLS_ENABLED:-false}"
+RABBITMQ_TLS_LOWER=$(echo "$RABBITMQ_TLS_ENABLED" | tr '[:upper:]' '[:lower:]')
+if [ "${RABBITMQ_TLS_LOWER}" = "true" ]; then
+    export RABBITMQ_URL="https://${RABBIT_HOST}:15671"
+else
+    export RABBITMQ_URL="http://${RABBIT_HOST}:15672"
+fi
+
 exec /docker-entrypoint.sh "$@"

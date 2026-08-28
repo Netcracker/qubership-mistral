@@ -1,0 +1,10 @@
+version: '2.0'
+
+notification_engine_restart:
+  tasks:
+    task1:
+      action: std.sleep seconds=60
+      on-success:
+        - task2
+    task2:
+      action: std.noop

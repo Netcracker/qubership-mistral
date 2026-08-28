@@ -3,6 +3,7 @@ python-jenkins
 python-dateutil!=2.8.1
 requests
 PyYAML
+psycopg2-binary
 # dictdiffer>=0.7.1
 openshift
 kubernetes<36

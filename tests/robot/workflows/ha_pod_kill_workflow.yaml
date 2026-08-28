@@ -1,0 +1,30 @@
+version: '2.0'
+
+ha_pod_kill_workflow:
+  tasks:
+    t1:
+      action: std.sleep seconds=60
+      retry:
+        count: 3
+        delay: 5
+      on-success:
+        - t2
+    t2:
+      action: std.sleep seconds=60
+      retry:
+        count: 3
+        delay: 5
+      on-success:
+        - t3
+    t3:
+      action: std.sleep seconds=60
+      retry:
+        count: 3
+        delay: 5
+      on-success:
+        - t4
+    t4:
+      action: std.sleep seconds=60
+      retry:
+        count: 3
+        delay: 5

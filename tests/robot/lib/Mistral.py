@@ -63,7 +63,7 @@ def retry(func, *args, **kwargs):
         try:
             return func(*args, **kwargs)
         except BaseException as e:
-            logger.error(str(e))
+            logger.debug(str(e))
 
         time.sleep(5)
 
@@ -192,7 +192,7 @@ class Mistral(object):
         for name in wf_names:
             self._workflows.append(name)
         return status_code
-    
+
 
     def extract_workflow_names(self, data):
         workflow_names = []
@@ -203,7 +203,7 @@ class Mistral(object):
                     if 'tasks' in value:
                         workflow_names.append(key)
                     extract_names(value)
-        
+
         extract_names(data)
         return workflow_names
 
@@ -310,6 +310,32 @@ class Mistral(object):
 
     @timeout()
     @error_handler
+    def create_execution_with_headers(self, name, ex_input=None, params=None, extra_headers=None):
+        ex_input = ex_input if ex_input else {}
+        ex_id = str(uuid.uuid4())
+
+        json_params = {'workflow_name': name, 'id': ex_id}
+        if '.' not in name:
+            json_params['workflow_namespace'] = self._workflow_namespace
+        if ex_input:
+            json_params['input'] = ex_input
+        if params:
+            json_params['params'] = params
+
+        res = self._security_request(
+            'POST', self._mistral_url + '/executions',
+            json=json_params,
+            headers=extra_headers or {}
+        )
+
+        if res.status_code == 423:
+            return 423
+        assert_response(res, 201)
+
+        execution = res.json()
+        self._ex_id = execution['id']
+        return execution
+
     def create_execution(self, name, ex_input=None, ex_id=None, params=None):
         res = self._create_execution_internal(
             name=name, ex_input=ex_input, ex_id=ex_id, params=params)
@@ -659,7 +685,7 @@ class Mistral(object):
             assert_response(res, [404, 204])
 
     @error_handler
-    def wait_unit_execution_will_has_state(self, state, attempt=30, wait=2, seconds=0):
+    def wait_until_execution_has_state(self, state, attempt=30, wait=2, seconds=0):
         if seconds > 0:
             attempt = int(seconds/10)
             wait = 10
@@ -679,7 +705,7 @@ class Mistral(object):
                 if state == ex['state']:
                     return
             except BaseException as e:
-                logger.error(str(e))
+                logger.debug(str(e))
 
         raise Exception("Time is up. Execution is {ex_id}. State is {state}"
                         "".format(ex_id=self._ex_id, state=ex['state']))
@@ -766,9 +792,8 @@ class Mistral(object):
             'params': {'recursive_terminate': flag}})
 
     @error_handler
-    def get_wf_ex_by_task(self, task_name):
-        task = [x for x in self._get_tasks() if x['name'] == task_name][0]
-
+    def get_wf_ex_by_task(self, task_name, ex_id=None):
+        task = self.get_task(task_name, ex_id=ex_id)
         task_id = task['id']
 
         res = self._security_request(
@@ -776,9 +801,28 @@ class Mistral(object):
             self._mistral_url + '/executions?task_execution_id=' + task_id)
         assert_response(res)
 
-        ex = res.json()['executions'][0]
+        executions = res.json()['executions']
+        if not executions:
+            raise AssertionError(
+                f"No child workflow execution for task {task_name} "
+                f"(task_id={task_id}, parent={ex_id or self._ex_id})"
+            )
 
-        return dotdict.DotDict(ex)
+        return dotdict.DotDict(executions[0])
+
+    @error_handler
+    def execution_has_state(self, ex_id, state):
+        """Assert a specific execution id currently has the given state."""
+        res = self._security_request(
+            'GET', self._mistral_url + '/executions/' + ex_id)
+        assert_response(res)
+        actual = res.json()['state']
+        asserts.assert_equal(
+            state,
+            actual,
+            f"Execution {ex_id} state expected {state} but was {actual}"
+        )
+        return actual
 
     def _change_execution(self, ex):
         res = self._security_request('PUT',
@@ -825,6 +869,22 @@ class Mistral(object):
             break
 
     @error_handler
+    def get_tasks(self, ex_id=None):
+        return [dotdict.DotDict(t) for t in self._get_tasks(ex_id)]
+
+    @error_handler
+    def rerun_task(self, task_name, reset=True):
+        task = [x for x in self._get_tasks() if x['name'] == task_name][0]
+        task_id = task['id']
+
+        url = self._mistral_url + '/tasks'
+        payload = {"id": task_id, "state": "RUNNING", "reset": bool(reset)}
+
+        res = self._security_request('PUT', url, json=payload)
+        assert_response(res, 200)
+        return res.status_code
+
+    @error_handler
     def skip_task(self, task_name):
         task = [x for x in self._get_tasks() if x['name'] == task_name][0]
         task_id = task['id']
@@ -863,8 +923,9 @@ class Mistral(object):
         if not events:
             return ValueError(f"{events} events must not be empty")
 
+        publisher_type = "webhook_with_retries" if number_of_retries else "webhook"
         webhook_parameters = {
-            "type": "webhook",
+            "type": publisher_type,
             "event_types": events,
             "url": url
         }
@@ -1054,7 +1115,7 @@ class Mistral(object):
             except TimeoutError as e:
                 raise e
             except BaseException as e:
-                logger.error(e)
+                logger.debug(str(e))
 
                 time.sleep(10)
 

@@ -1,0 +1,23 @@
+---
+version: '2.0'
+
+name: recovery_subwf
+
+workflows:
+  main_wf:
+    type: direct
+    tasks:
+      task1:
+        on-success:
+          - task2
+      task2:
+        workflow: sub_wf
+
+  sub_wf:
+    type: direct
+    tasks:
+      task1:
+        on-success:
+          - task2
+      task2:
+        action: std.fail

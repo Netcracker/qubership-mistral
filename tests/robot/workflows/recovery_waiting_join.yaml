@@ -1,0 +1,13 @@
+version: '2.0'
+
+recovery_waiting_join:
+  tasks:
+    t1_1:
+      action: std.noop
+      on-success: t2
+    t1_2:
+      action: std.noop
+      on-success: t2
+    t2:
+      action: std.fail
+      join: all

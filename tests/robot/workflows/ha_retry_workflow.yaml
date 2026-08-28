@@ -1,0 +1,9 @@
+version: '2.0'
+
+ha_retry_workflow:
+  tasks:
+    retry_task:
+      action: std.fail
+      retry:
+        count: 20
+        delay: 3

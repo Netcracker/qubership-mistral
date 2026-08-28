@@ -2490,7 +2490,7 @@ def get_expired_subwf_tasks(timeout, session=None):
     ).filter(
         models.TaskExecution.updated_at + timeout < utils.utc_now_sec()
     ).filter(
-        models.WorkflowExecution.id is None
+        models.WorkflowExecution.id.is_(None)
     )
 
     return [i[0] for i in query.all()]
@@ -2511,8 +2511,7 @@ def get_stucked_subwf_tasks(timeout, session=None):
     ).filter(
         models.TaskExecution.updated_at + timeout < utils.utc_now_sec()
     ).filter(
-        models.WorkflowExecution.state == states.SUCCESS or
-        models.WorkflowExecution.state == states.ERROR
+        models.WorkflowExecution.state.in_([states.SUCCESS, states.ERROR])
     )
 
     return [i[0] for i in query.all()]

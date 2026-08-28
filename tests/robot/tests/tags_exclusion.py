@@ -24,11 +24,11 @@ def parameters_are_enabled(environ, *variable_names) -> bool:
 def get_excluded_tags(environ) -> list:
     excluded_tags = ["custom-actions"]
     if not parameters_are_enabled(environ, "RUN_BENCHMARKS"):
-        excluded_tags.append("mistral_svt")
+        excluded_tags.extend(["mistral_svt", "resilience"])
         if not parameters_are_enabled(environ, "AUTH_ENABLE"):
             excluded_tags.append("security")
     else:
-        excluded_tags.extend(["basic", "security", "dr", "heartbeat", "benchmark_skip"])
+        excluded_tags.extend(["basic", "security", "dr", "heartbeat", "dbaas", "benchmark_skip"])
     if not parameters_are_enabled(environ, "PROMETHEUS_URL"):
         excluded_tags.append("alerts")
     return excluded_tags

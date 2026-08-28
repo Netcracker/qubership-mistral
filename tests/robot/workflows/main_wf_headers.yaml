@@ -1,0 +1,11 @@
+version: '2.0'
+
+main_wf_headers:
+  input:
+    - headers_url
+
+  tasks:
+    main_task:
+      workflow: sub_wf_headers
+      input:
+        headers_url: <% $.headers_url %>
