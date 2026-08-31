@@ -76,8 +76,10 @@ spec:
         {{ .Values.operator.affinity | toJson }}
       {{- end }}
       securityContext:
-        {{- include "restricted.globalPodSecurityContext" . | nindent 8 }}
+        runAsNonRoot: true
         {{- if ne (default "KUBERNETES" .Values.PAAS_PLATFORM) "OPENSHIFT" }}
+        seccompProfile:
+          type: "RuntimeDefault"
         runAsUser: 1001
         runAsGroup: 1001
         fsGroup: 1001
