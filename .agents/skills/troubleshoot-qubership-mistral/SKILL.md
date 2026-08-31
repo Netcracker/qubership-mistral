@@ -1,6 +1,6 @@
 ---
 name: troubleshoot-qubership-mistral
-description: Diagnose Qubership Mistral deployment and runtime failures — error-status workflows, stuck executions, unresponsive API, RabbitMQ/DB issues, monitoring alarms. Use when triaging a broken Mistral deployment or reading its alarms/logs.
+description: Diagnose Qubership Mistral deployment, runtime, and test-pipeline failures — error-status workflows, stuck executions, unresponsive API, RabbitMQ/DB issues, monitoring alarms, failed robot integration tests. Use when triaging a broken Mistral deployment, reading its alarms/logs, or assessing a failed Mistral test pipeline.
 ---
 
 # Troubleshooting Qubership Mistral
@@ -34,6 +34,12 @@ symptom.
 | Deploy with `clean` flag fails (active DB connections)                               | Mistral Cannot Deploy Because of Active Connections to DB |
 | Need to purge or trim execution history                                              | How to Clean Mistral Database                             |
 | Monitoring alarm firing (Down/Degraded/CPULoad/MemoryLoad/RabbitMQ connections down) | Monitoring Alarms Description                             |
+| `mistral-tests` pod/deployment failed                                                | Troubleshooting Robot Integration Tests                   |
+
+## Robot integration tests failure
+
+If the failing component is the `mistral-tests` pod/deployment, load
+`references/robot-tests.md` instead of `references/troubleshooting.md`.
 
 ## Beyond the reference file
 
