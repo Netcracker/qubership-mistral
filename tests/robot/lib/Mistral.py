@@ -765,8 +765,8 @@ class Mistral(object):
         self._change_execution({'state': 'PAUSED'})
 
     @error_handler
-    def resume_execution(self):
-        self._change_execution({'state': 'RUNNING'})
+    def resume_execution(self,  ex_id=None):
+        self._change_execution({'state': 'RUNNING'}, ex_id)
 
     @error_handler
     def fail_execution(self):
@@ -786,10 +786,12 @@ class Mistral(object):
         self._change_execution({'params': {'read_only': True}})
 
     @error_handler
-    def interrupt_execution(self, recursive_terminate_flag):
+    def interrupt_execution(self, recursive_terminate_flag, ex_id=None):
         flag = recursive_terminate_flag == 'True'
-        self._change_execution({'state': 'ERROR',
-            'params': {'recursive_terminate': flag}})
+        self._change_execution(
+            {'state': 'ERROR', 'params': {'recursive_terminate': flag}},
+            ex_id=ex_id
+        )
 
     @error_handler
     def get_wf_ex_by_task(self, task_name, ex_id=None):
@@ -824,11 +826,12 @@ class Mistral(object):
         )
         return actual
 
-    def _change_execution(self, ex):
+    def _change_execution(self, ex, ex_id=None):
+        ex_id = ex_id or self._ex_id
         res = self._security_request('PUT',
-                                     self._mistral_url + '/executions/'
-                                     + self._ex_id,
-                                     json=ex)
+                                        self._mistral_url + '/executions/'
+                                        + ex_id,
+                                        json=ex)
         assert_response(res)
 
         ex = res.json()
@@ -873,6 +876,17 @@ class Mistral(object):
         return [dotdict.DotDict(t) for t in self._get_tasks(ex_id)]
 
     @error_handler
+    def task_in_execution_must_have_state(self, ex_id, task_name, expected_state):
+        tasks = self._get_tasks(ex_id)
+        matching = [t for t in tasks if t['name'] == task_name]
+        assert matching, f"Task '{task_name}' not found in execution '{ex_id}'"
+        actual_state = matching[0]['state']
+        assert actual_state == expected_state, (
+            f"Task '{task_name}' in execution '{ex_id}' expected state "
+            f"'{expected_state}' but got '{actual_state}'"
+        )
+
+    @error_handler
     def rerun_task(self, task_name, reset=True):
         task = [x for x in self._get_tasks() if x['name'] == task_name][0]
         task_id = task['id']
@@ -899,6 +913,13 @@ class Mistral(object):
         assert_response(res, 200)
 
         return status_code
+
+    @error_handler
+    def get_action_execution_id(self, task_name):
+        task = [x for x in self._get_tasks() if x['name'] == task_name][0]
+        actions = self._get_actions(task['id'])
+        return actions[0]['id']
+
 
     @error_handler
     def continue_action(self, action_ex_id):

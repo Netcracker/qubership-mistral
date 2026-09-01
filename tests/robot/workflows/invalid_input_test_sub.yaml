@@ -1,0 +1,9 @@
+version: '2.0'
+invalid_input_test_sub:
+  input:
+    - blabla
+  tasks:
+    task1@1@blabla:
+      action: std.noop
+      publish:
+        task1.1_result: "1_1"

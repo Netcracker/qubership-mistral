@@ -130,3 +130,11 @@ Compare Images From Resources With Dd
       ${resource_image}=  Get Resource Image  ${type}  ${name}  ${KUBERNETES_NAMESPACE}  ${container_name}
       Should Be Equal  ${resource_image}  ${image}
     END
+
+Wait until task ${name} has state ${state}
+    Wait Until Keyword Succeeds    30x    2s    Task must have state    ${name}    ${state}
+
+Task must have state
+    [Arguments]    ${name}    ${state}
+    ${TASK}=    Get task    ${name}
+    Should Be Equal    ${state}    ${TASK.state}

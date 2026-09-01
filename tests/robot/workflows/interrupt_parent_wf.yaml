@@ -1,0 +1,17 @@
+version: '2.0'
+
+interrupt_sub_wf:
+  tasks:
+    t2:
+      action: std.sleep seconds=60
+      on-complete: [t3]
+    t3:
+      action: std.noop
+
+interrupt_parent_wf:
+  tasks:
+    t1:
+      workflow: interrupt_sub_wf
+      on-success: [t4]
+    t4:
+      action: std.noop

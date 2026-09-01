@@ -947,7 +947,7 @@ class TestWorkflowsController(base.APITest):
         checksum = body['workflows'][0]['checksum']
         self.assertTrue(checksum != checksum_old)
 
-    def test_checksum_has_md5_format(self):
+    def test_checksum_matches(self):
         resp = self.app.post(
             '/v2/workflows',
             WF_DEFINITION,
@@ -955,11 +955,6 @@ class TestWorkflowsController(base.APITest):
         )
         body = resp.json
         checksum = body['workflows'][0]['checksum']
-        self.assertTrue(self.is_valid_checksum(checksum))
+        expected_checksum = hashlib.md5(WF_DEFINITION.encode('utf-8')).hexdigest()
+        self.assertEqual(checksum, expected_checksum)
 
-    def is_valid_checksum(self, checksum):
-        try:
-            hashlib.md5(checksum.encode())
-            return True
-        except Exception:
-            return False

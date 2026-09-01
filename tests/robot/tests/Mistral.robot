@@ -645,6 +645,38 @@ Retry policies are supported
     Recreate the retry_flow workflow, start and wait ERROR state
     number of actions equals  task1  4
 
+Test timeout for task with async action
+    [Tags]    basic
+    Recreate the timeout_async_action workflow, start and wait ERROR state
+
+    number of tasks equals    1
+    state of task1 task must be equal ERROR
+    ${TASK}=    Get task    task1
+    Should Contain    ${TASK.state_info}    Action timed out
+
+Test timeout for task with sync action
+    [Tags]    basic
+    Recreate the timeout_sync_action workflow, start and wait ERROR state
+
+    number of tasks equals    1
+    state of task1 task must be equal ERROR
+    ${TASK}=    Get task    task1
+    Should Contain    ${TASK.state_info}    Action timed out
+
+Test timeout doesn't change finished executions state
+    [Tags]    basic
+    Recreate the timeout_async_action_complete_before workflow and start
+
+    Wait until task task1 has state RUNNING
+
+    ${ACTION_EX_ID}=    Get action execution id    task1
+    continue action    ${ACTION_EX_ID}
+
+    Wait until the execution will has SUCCESS state
+
+    Sleep    130s
+    state of task1 task must be equal SUCCESS
+
 
 The input field in execution responds
     [Tags]   basic
@@ -672,6 +704,32 @@ Execution was cancelled
     Wait until the execution will has CANCELLED state
     number of tasks equals   1
     state of task1 task must be equal SUCCESS
+
+Produce CANCELLED request cancels execution during retry delay
+    [Tags]    basic
+    Recreate the cancel_during_retry_delay workflow and start
+
+    Wait until task t1 has state DELAYED
+
+    cancel execution
+    Wait until the execution will has CANCELLED state
+
+    number of tasks equals    1
+    state of t1 task must be equal ERROR
+
+Produce CANCELLED request cancels execution during parallel running tasks
+    [Tags]    basic
+    Recreate the cancel_during_parallel_sleep workflow and start
+
+    Wait until task t1 has state RUNNING
+    Wait until task t3 has state RUNNING
+
+    cancel execution
+    Wait until the execution will has CANCELLED state
+
+    number of tasks equals    2
+    state of t1 task must be equal SUCCESS
+    state of t3 task must be equal SUCCESS
 
 Test Hardcoded Images
     [Tags]  mistral_images  basic
@@ -701,6 +759,34 @@ Force cancel propagates to sub-workflow tasks
     ${SLOW_TASK}=  Get task  slow_task  ${SUB_EX.id}
     Should be equal  ERROR  ${SLOW_TASK.state}
 
+Direct steps with @ notation - case 1
+    [Tags]    basic
+    Recreate the invalid_input_test_sub workflow
+    Recreate the invalid_input_test_main_case0 workflow, start and wait ERROR state
+
+    number of tasks equals    7
+    state of task1@1@blabla task must be equal SUCCESS
+    state of task2@1@blabla task must be equal SUCCESS
+    state of task2@2@blabla task must be equal SUCCESS
+    state of task2@3@blabla task must be equal SUCCESS
+    state of task3@2@blabla task must be equal ERROR
+    state of task4@1@blabla task must be equal SUCCESS
+    state of task4@3@blabla task must be equal SUCCESS
+
+Direct steps with @ notation - case 2
+    [Tags]    basic
+    Recreate the invalid_input_test_main_case2 workflow, start and wait ERROR state
+
+    number of tasks equals    8
+    state of task1@1@blabla task must be equal SUCCESS
+    state of task2@1@blabla task must be equal SUCCESS
+    state of task2@2@blabla task must be equal SUCCESS
+    state of task2@3@blabla task must be equal SUCCESS
+    state of task3@2@blabla task must be equal ERROR
+    state of task4@1@blabla task must be equal SUCCESS
+    state of task4@2@blabla task must be equal ERROR
+    state of task4@3@blabla task must be equal SUCCESS
+
 DBaaS PG Credentials And Properties Are In Sync
     [Tags]    dbaas    mistral
     ${dbaas_enabled}=    DBaaS Integration Is Enabled
@@ -726,4 +812,38 @@ DBaaS PG Credentials And Properties Are In Sync
     ...    msg=pg-port in ConfigMap does not match DBaaS port
     Should Be Equal    ${cm.data['pg-db-name']}  ${conn['name']}
     ...    msg=pg-db-name in ConfigMap does not match DBaaS name
+
+E2E operation tracing
+    [Tags]    basic
+    Recreate the sleep_120s workflow
+
+    ${EX_ID_1}=  Generate uuid
+    ${EX_ID_2}=  Generate uuid
+
+    Create execution  sleep_120s  ex_id=${EX_ID_1}
+    Wait until task t1 has state RUNNING
+
+    Pause execution
+    Wait until the execution will has PAUSED state
+
+    Create execution  sleep_120s  ex_id=${EX_ID_2}
+    Wait until task t1 has state RUNNING
+
+    Execution has state  ${EX_ID_1}  PAUSED
+
+    Resume execution  ${EX_ID_1}
+
+    Wait Until Keyword Succeeds  60x  2s  Execution has state  ${EX_ID_1}  SUCCESS
+    Wait Until Keyword Succeeds  60x  2s  Execution has state  ${EX_ID_2}  SUCCESS
+
+    ${T1_EX1}=  Get task  t1  ${EX_ID_1}
+    ${T2_EX1}=  Get task  t2  ${EX_ID_1}
+    Should Be Equal  SUCCESS  ${T1_EX1.state}
+    Should Be Equal  SUCCESS  ${T2_EX1.state}
+
+    ${T1_EX2}=  Get task  t1  ${EX_ID_2}
+    ${T2_EX2}=  Get task  t2  ${EX_ID_2}
+    Should Be Equal  SUCCESS  ${T1_EX2.state}
+    Should Be Equal  SUCCESS  ${T2_EX2.state}
+
 
