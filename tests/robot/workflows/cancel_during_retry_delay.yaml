@@ -1,0 +1,11 @@
+version: '2.0'
+cancel_during_retry_delay:
+  tasks:
+    t1:
+      action: std.fail
+      retry:
+        count: 3
+        delay: 30
+      on-error: t2
+    t2:
+      action: std.fail

@@ -1,0 +1,55 @@
+version: '2.0'
+invalid_input_test_main_case2:
+  tasks:
+    task1@1@blabla:
+      action: std.noop
+      publish:
+        task1.1_result: "1_1"
+      on-success:
+        - task2@1@blabla
+        - task2@2@blabla
+        - task2@3@blabla
+    task2@1@blabla:
+      action: std.noop
+      publish:
+        task2.1_result: "2_1"
+      on-success:
+        - task4@1@blabla
+    task2@2@blabla:
+      action: std.noop
+      publish:
+        task2.2_result: "2_2"
+      on-success:
+        - task3@2@blabla
+    task2@3@blabla:
+      action: std.noop
+      publish:
+        task2.3_result: "2_3"
+      on-success:
+        - task4@3@blabla
+    task3@2@blabla:
+      workflow: invalid_input_test_sub2
+      input:
+        blabla1: true
+      safe-input: true
+      publish:
+        task3.2_result: "3_2"
+      on-success:
+        - task4@2@blabla
+    task4@1@blabla:
+      action: std.noop
+      publish:
+        task4.1_result: "4_1"
+      on-success:
+        - task4@2@blabla
+    task4@2@blabla:
+      action: std.noop
+      join: all
+      publish:
+        task4.2_result: "4_2"
+    task4@3@blabla:
+      action: std.noop
+      publish:
+        task4.3_result: "4_3"
+      on-success:
+        - task4@2@blabla

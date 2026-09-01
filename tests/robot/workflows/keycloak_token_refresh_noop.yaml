@@ -1,0 +1,15 @@
+version: '2.0'
+
+keycloak_token_refresh_noop:
+  input:
+    - url
+  output:
+    result: <% task(task2).result %>
+  tasks:
+    task1:
+      action: std.async_noop
+      on-success: task2
+    task2:
+      action: oauth2.http
+      input:
+        url: <% $.url %>

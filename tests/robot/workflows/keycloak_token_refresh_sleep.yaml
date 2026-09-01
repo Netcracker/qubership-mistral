@@ -1,0 +1,18 @@
+version: '2.0'
+
+keycloak_token_refresh_sleep:
+  input:
+    - url
+    - sleep_seconds
+  output:
+    result: <% task(task2).result %>
+  tasks:
+    task1:
+      action: std.sleep
+      input:
+        seconds: <% $.sleep_seconds %>
+      on-success: task2
+    task2:
+      action: oauth2.http
+      input:
+        url: <% $.url %>
