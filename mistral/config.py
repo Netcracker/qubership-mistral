@@ -55,7 +55,8 @@ wf_trace_log_name_opt = cfg.StrOpt(
 auth_type_opt = cfg.StrOpt(
     'auth_type',
     default='keystone',
-    help=_('Authentication type (valid options: keystone, keycloak-oidc)')
+    help=_('Authentication type (valid options: keystone, keycloak-oidc, '
+           'k8s-sa, mitreid)')
 )
 
 auth_opts = [
@@ -249,6 +250,18 @@ pecan_opts = [
     )
 ]
 
+k8s_sa_opts = [
+    cfg.StrOpt(
+        'audience',
+        default='mistral',
+        help=_('Expected audience for k8s-sa auth tokens.')
+    ),
+    cfg.ListOpt(
+        'admin_service_accounts',
+        default=[],
+        help=_('List of service Account names for granting admin role.')
+    ),
+]
 headers_propagation_opts = [
     cfg.BoolOpt(
         'enabled',
@@ -1016,6 +1029,7 @@ CONTEXT_VERSIONING_GROUP = 'context_versioning'
 PROFILER_GROUP = profiler.list_opts()[0][0]
 AUTH_GROUP = 'auth'
 KEYCLOAK_OIDC_GROUP = "keycloak_oidc"
+K8S_SA_GROUP = "k8s_sa"
 YAQL_GROUP = "yaql"
 HEALTHCHECK_GROUP = 'healthcheck'
 KEYSTONE_GROUP = "keystone"
@@ -1060,6 +1074,7 @@ CONF.register_opts(headers_propagation_opts, group=HEADERS_PROP_GROUP)
 CONF.register_opts(profiler_opts, group=PROFILER_GROUP)
 CONF.register_opts(auth_opts, group=AUTH_GROUP)
 CONF.register_opts(keycloak_oidc_opts, group=KEYCLOAK_OIDC_GROUP)
+CONF.register_opts(k8s_sa_opts, group=K8S_SA_GROUP)
 CONF.register_opts(yaql_opts, group=YAQL_GROUP)
 CONF.register_opts(healthcheck_opts, group=HEALTHCHECK_GROUP)
 CONF.register_opts(oauth2_opts, group=OAUTH2_GROUP)
@@ -1109,6 +1124,7 @@ def list_opts():
         (PROFILER_GROUP, profiler_opts),
         (AUTH_GROUP, auth_opts),
         (KEYCLOAK_OIDC_GROUP, keycloak_oidc_opts),
+        (K8S_SA_GROUP, k8s_sa_opts),
         (YAQL_GROUP, yaql_opts),
         (HEALTHCHECK_GROUP, healthcheck_opts),
         (OAUTH2_GROUP, oauth2_opts),
