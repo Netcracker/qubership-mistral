@@ -286,6 +286,29 @@ class MitreidLibrary(IdpBase):
         return resp.json()
 
 
+class K8sSALibrary(IdpBase):
+    """Gets a token from the Kubernetes ServiceAccount token file.
+    """
+
+    DEFAULT_TOKEN_PATH = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+
+    def __init__(self, idp_server='', client_register_token='',
+                 idp_client_id='', idp_client_secret='',
+                 token_path=None, **kwargs):
+        super().__init__(
+            idp_server=idp_server,
+            client_register_token=client_register_token,
+            idp_client_id=idp_client_id,
+            idp_client_secret=idp_client_secret,
+            multitenancy_enabled=False,
+        )
+        self._token_path = token_path or self.DEFAULT_TOKEN_PATH
+
+    def get_token(self):
+        with open(self._token_path, 'r') as f:
+            return f.read().strip()
+
+
 def error_handler(parser, message):
     print(message)
     parser.print_help()

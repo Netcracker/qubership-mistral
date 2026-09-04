@@ -445,6 +445,15 @@ Service Account for Site Manager depending on smSecureAuth
 
 
 {{/*
+Whether k8s-sa auth is enabled (auth.enable=true AND auth.type=k8s-sa)
+*/}}
+{{- define "mistral.k8sSaAuthEnabled" -}}
+{{- $auth := toString (default false .Values.mistralCommonParams.auth.enable) | lower -}}
+{{- $authType := default "" .Values.mistralCommonParams.auth.type | lower -}}
+{{- if and (eq $auth "true") (eq $authType "k8s-sa") -}}true{{- end -}}
+{{- end -}}
+
+{{/*
 Whether integrationTests is enabled
 */}}
 {{- define "integrationTests.enabled" -}}
@@ -524,7 +533,8 @@ Determining whether IDP JWK Secrets should be populated
 */}}
 {{- define "idpSecrets.populate" -}}
 {{- $auth := toString (default false .Values.mistralCommonParams.auth.enable) | lower -}}
-{{- if (eq $auth "true") -}}
+{{- $authType := default "" .Values.mistralCommonParams.auth.type | lower -}}
+{{- if and (eq $auth "true") (ne $authType "k8s-sa") -}}
 {{- if and
   (not (empty .Values.secrets.idpClientId))
   (ne  (toString .Values.secrets.idpClientId) "null")

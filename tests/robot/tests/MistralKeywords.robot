@@ -5,6 +5,7 @@
 *** Variables ***
 ${OWN_URL}                 %{OWN_URL}
 ${AUTH_ENABLE}             %{AUTH_ENABLE}
+${AUTH_TYPE}               %{AUTH_TYPE}
 ${TENANT}                  system
 ${WORKFLOW_NAMESPACE}      tests
 ${KUBERNETES_NAMESPACE}    %{KUBERNETES_NAMESPACE}

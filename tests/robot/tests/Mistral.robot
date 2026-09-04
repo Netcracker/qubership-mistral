@@ -557,6 +557,14 @@ Webhook notifier returns token
 
     Wait until the execution will has SUCCESS state
 
+Authenticate with Kubernetes SA token
+    [Tags]  security  k8s-sa
+    Skip if auth is disalbed  ${AUTH_ENABLE}
+    Skip If    '${AUTH_TYPE}' != 'k8s-sa'    Not a k8s-sa auth environment
+
+    ${STATUS_CODE}=  Get workflow http status  basic
+    Should Be Equal As Integers  ${STATUS_CODE}  200
+
 Mistral heartbeat
     [Tags]  basic  heartbeat
 

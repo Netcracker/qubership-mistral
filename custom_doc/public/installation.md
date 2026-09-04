@@ -333,7 +333,7 @@ The Mistral Authentication parameters used for the configurations are specified 
 |Parameter   |Type  |Mandatory|Default value|Description                                                        |
 |------------|------|---------|-------------|-------------------------------------------------------------------|
 |mistralCommonParams.auth.enable|bool|no|'False'|This parameter specifies whether authentication is enabled.|
-|mistralCommonParams.auth.type|string|no|'mitreid'|This parameter specifies the authentication type.|
+|mistralCommonParams.auth.type|string|no|'mitreid'|This parameter specifies the authentication type. Valid values: `mitreid`, `keycloak-oidc`, `k8s-sa`, `keystone`.|
 |mistralCommonParams.auth.certs|string|no|''|This parameter specifies the certificate to verify idpExternalServer.|
 |mistralCommonParams.auth.projectRules|list|no|`[{"type":"extract","field":"iss","pattern":"*/realms/{value}"}]`|This parameter specifies the rules for resolving the project ID from token claims. For more information, see [Project ID Resolution](#project-id-resolution).|
 |mistralCommonParams.defaultProjectId|string|yes|''|This parameter specifies the fallback project ID to use when authentication is not enabled or no project rule matches the token.|
@@ -433,6 +433,52 @@ mistralCommonParams:
         field: "iss"
         pattern: "*/realms/{value}"
 ```
+
+## Kubernetes Service Account Authentication
+
+When `mistralCommonParams.auth.type` is set to `k8s-sa`, Mistral authenticates
+inbound API requests using Kubernetes ServiceAccount JWT tokens. Token validation
+is delegated to the Kubernetes API server via the TokenReview API.
+
+### Required RBAC
+
+When `auth.type: k8s-sa` is enabled, the Helm chart creates:
+
+- **ServiceAccount** `mistral-api-sa` — used by the Mistral API pods.
+- **ClusterRole** `mistral-token-reviewer` — grants `create` on `tokenreviews.authentication.k8s.io`.
+- **ClusterRoleBinding** `mistral-token-reviewer-binding` — binds the ClusterRole to `mistral-api-sa`.
+
+### Example Configuration
+
+```yaml
+mistralCommonParams:
+  auth:
+    enable: true
+    type: k8s-sa
+    projectRules:
+      - type: extract
+        field: namespace
+        pattern: "{value}"
+  defaultProjectId: "default"
+```
+
+The `projectRules` example above maps the ServiceAccount's namespace directly to
+the Mistral project ID. Adjust the rules to match your project ID scheme — see
+[Project ID Resolution](#project-id-resolution) for details.
+
+### Authorization scope
+
+With `k8s-sa`, authorization is **project-scoped only**. Mistral does not
+perform any role-based access checks (no admin/member role enforcement) for
+this auth type. Access is granted to any request carrying a valid ServiceAccount
+token, scoped to the project ID resolved from that token's claims.
+
+> **Note:** Role-based authorization is intentionally excluded because Mistral's
+> admin-gated endpoints are not used in current ServiceAccount-based deployments.
+> If role enforcement becomes necessary in the future, it can be introduced by
+> implementing a ServiceAccount-name-to-role mapping (e.g. mapping specific SA
+> names or groups to `admin`/`member` roles) in the `K8sSAAuthHandler`.
+
 
 ## Kafka Notification Parameters
 

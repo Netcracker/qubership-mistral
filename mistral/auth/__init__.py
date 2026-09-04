@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import abc
+import re
 
 from oslo_config import cfg
 from stevedore import driver
@@ -21,6 +22,40 @@ from mistral import exceptions as exc
 
 
 _IMPL_AUTH_HANDLER = None
+
+TOKEN_HEADER_KEY = 'Authorization'
+_AUTH_HEADER_PATTERN = re.compile(r'^\w+\s(.*)$')
+
+
+def extract_token_from_header(headers):
+    header_with_token = headers.get(TOKEN_HEADER_KEY)
+
+    if not header_with_token:
+        token = headers.get('X-Auth-Token')
+
+        if token:
+            return token
+
+        raise exc.UnauthorizedException(
+            message='There is no token in headers(X-Auth-Token,Authorization)'
+        )
+
+    header_pattern_match = _AUTH_HEADER_PATTERN.match(header_with_token)
+
+    if header_pattern_match is None:
+        raise exc.UnauthorizedException(
+            'Does not match pattern ' + _AUTH_HEADER_PATTERN.pattern
+        )
+
+    groups = header_pattern_match.groups()
+
+    if len(groups) != 1:
+        raise exc.UnauthorizedException(
+            'Not found the token in the header. '
+            'Authorization header: {}'.format(header_with_token)
+        )
+
+    return groups[0]
 
 
 def get_auth_handler():
