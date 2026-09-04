@@ -883,6 +883,9 @@ class KubernetesHelper:
                     key=MC.CUSTOM_CONFIG_API, path=MC.ADDITIONAL_CONFIGS_FILE_PATH
                 )
             )
+            if self.is_auth_enabled() and self.get_auth_type() == 'k8s-sa':
+                pod_template_spec.spec.service_account_name = \
+                    MC.API_SERVICE_ACCOUNT
 
         if server_name.lower() == 'executor':
             executor_params = self._spec['mistralExecutor']
@@ -1357,6 +1360,12 @@ class KubernetesHelper:
             logger.info("Auth is not enabled.")
             return
 
+        if str(auth_type).lower() == 'k8s-sa':
+            logger.info(
+                "Auth type is k8s-sa, skipping IDP params generation."
+            )
+            return
+
         idp_server = self._spec['mistralCommonParams'].get('idpServer')
         idp_external_server = self._spec['mistralCommonParams'].get('idpExternalServer')
 
@@ -1649,6 +1658,11 @@ class KubernetesHelper:
 
     def is_auth_enabled(self):
         return self._spec['mistralCommonParams']['auth']['enable']
+
+    def get_auth_type(self):
+        return str(
+            self._spec['mistralCommonParams']['auth'].get('type', '')
+        ).lower()
 
     def is_cloud_core_integration_enabled(self):
         return self._spec['mistral']['cloudCoreIntegrationEnabled']
