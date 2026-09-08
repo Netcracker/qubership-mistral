@@ -256,6 +256,45 @@ All Recovery Executions Have ERROR
     Execution Has State  ${RECOVERY_EXPIRED_ID}  ERROR
 
 *** Test Cases ***
+Oauth2 token cache refreshes after async_noop stays RUNNING past expiry
+    [Tags]   http  oauth2-token-refresh
+    [Timeout]  10 min
+    [Teardown]  Restore Config And Teardown
+    Skip if auth is disalbed  ${AUTH_ENABLE}
+    Set Custom Config Params And Restart  ${COMMON_CONFIG_KEY}  oauth2  idp_url = ${OWN_URL}
+
+    ${TOKEN_BEFORE}=  Warm Oauth2 Token Cache And Get Token
+
+    ${EX_INPUT}=  Create Dictionary  url=${OWN_URL}/oauth2
+    Recreate the keycloak_token_refresh_noop workflow and start with ${EX_INPUT}
+    Wait until task task1 has state RUNNING
+    ${ACTION_EX_ID}=  Get action execution id  task1
+
+    Sleep  10s
+    continue action  ${ACTION_EX_ID}
+
+    wait until execution has state  SUCCESS  attempt=${60}  wait=${5}
+    ${TOKEN_AFTER}=  await rest
+    Should Be True  '${TOKEN_AFTER}' != 'None'
+    Should Be True  '${TOKEN_AFTER}' != ""
+    Should Not Be Equal  ${TOKEN_BEFORE}  ${TOKEN_AFTER}
+
+Oauth2 token cache refreshes after sleep task resumes past expiry
+    [Tags]   http  oauth2-token-refresh
+    [Timeout]  10 min
+    [Teardown]  Restore Config And Teardown
+    Skip if auth is disalbed  ${AUTH_ENABLE}
+    Set Custom Config Params And Restart  ${COMMON_CONFIG_KEY}  oauth2  idp_url = ${OWN_URL}
+
+    ${TOKEN_BEFORE}=  Warm Oauth2 Token Cache And Get Token
+
+    ${SLEEP_INPUT}=  Create Dictionary  url=${OWN_URL}/oauth2  sleep_seconds=${10}
+    Recreate the keycloak_token_refresh_sleep workflow, start with ${SLEEP_INPUT} and wait SUCCESS state
+
+    ${TOKEN_AFTER}=  await rest
+    Should Be True  '${TOKEN_AFTER}' != 'None'
+    Should Be True  '${TOKEN_AFTER}' != ""
+    Should Not Be Equal  ${TOKEN_BEFORE}  ${TOKEN_AFTER}
 
 Workflow output with non-limited execution field size
     [Tags]  boundaries

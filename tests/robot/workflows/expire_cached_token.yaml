@@ -1,0 +1,7 @@
+version: '2.0'
+expire_cached_token:
+  output:
+    result: <% task(task1).result %>
+  tasks:
+    task1:
+      action: tests.expire_cached_token

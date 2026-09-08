@@ -19,6 +19,7 @@ import threading
 import time
 
 import aiohttp
+import requests
 from tornado import web
 
 from thread_logger import BackgroundLogger
@@ -116,6 +117,51 @@ class HA_AsyncHandler(web.RequestHandler):
                 logger.error(b)
 
             await asyncio.sleep(5)
+
+
+class FakeIdpTokenHandler(web.RequestHandler):
+    """Mimics Keycloak's client_credentials token response, but with a
+    tiny real expires_in."""
+
+    FAKE_TOKEN_TTL_SECONDS = 5
+
+    def post(self):
+        self.set_header("Content-Type", "application/json")
+        self.write(json.dumps({
+            "access_token": f"fake-token-{time.time()}",
+            "token_type": "Bearer",
+            "expires_in": self.FAKE_TOKEN_TTL_SECONDS,
+        }))
+
+
+class FakeJwksHandler(web.RequestHandler):
+    """Proxies Keycloak JWKS requests to the real IDP.
+
+    When [oauth2] idp_url is redirected to this mock server, Mistral still
+    needs to validate the Robot's real Bearer tokens via JWT signature
+    verification. This handler forwards /certs requests to the actual
+    Keycloak so that get_public_key() can succeed.
+    """
+
+    def initialize(self, real_idp_server):
+        self._real_idp_server = real_idp_server
+
+    def get(self, realm_name):
+        if not self._real_idp_server:
+            self.set_status(404)
+            return
+        real_url = (
+            f"{self._real_idp_server}/auth/realms/{realm_name}"
+            "/protocol/openid-connect/certs"
+        )
+        try:
+            resp = requests.get(real_url, verify=False, timeout=10)
+            self.set_header("Content-Type", "application/json")
+            self.set_status(resp.status_code)
+            self.write(resp.text)
+        except Exception as e:
+            logger.error(f"FakeJwksHandler: failed to proxy JWKS from {real_url}: {e}")
+            self.set_status(502)
 
 
 class Oauth2Handler(web.RequestHandler):
@@ -228,8 +274,9 @@ class TaskNotifyHandler(web.RequestHandler):
 class HttpServerLibrary(object):
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
 
-    def __init__(self, mistral_url):
+    def __init__(self, mistral_url, idp_server=''):
         self._mistral_url = mistral_url
+        self._idp_server = idp_server
 
         self.id_queue = queue.Queue()
         self.status_queue = queue.Queue()
@@ -254,7 +301,11 @@ class HttpServerLibrary(object):
                         "queue": self.queue,
                         "is_fail": self.is_fail
                     }),
-                    (r'/task_notify', TaskNotifyHandler, {"queue": self.queue})]
+                    (r'/task_notify', TaskNotifyHandler, {"queue": self.queue}),
+                    (r'/auth/realms/cloud-common/protocol/openid-connect/token',
+                     FakeIdpTokenHandler),
+                    (r'/auth/realms/([^/]+)/protocol/openid-connect/certs',
+                     FakeJwksHandler, {"real_idp_server": self._idp_server})]
 
         self._app = web.Application(handlers=handlers)
         self._loop = asyncio.new_event_loop()

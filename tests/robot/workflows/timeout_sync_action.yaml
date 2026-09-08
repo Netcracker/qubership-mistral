@@ -1,0 +1,6 @@
+version: '2.0'
+timeout_sync_action:
+  tasks:
+    task1:
+      action: std.sleep seconds=20
+      timeout: 10

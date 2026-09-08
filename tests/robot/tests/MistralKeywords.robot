@@ -30,6 +30,7 @@ Library  ../lib/Mistral.py  mistral_url=%{MISTRAL_URL}
 ...                      idp_client_secret=%{IDP_CLIENT_SECRET}
 ...                      workflow_namespace=${WORKFLOW_NAMESPACE}
 Library  ../lib/HttpServerLibrary.py  mistral_url=%{MISTRAL_URL}
+...                                   idp_server=%{IDP_SERVER=}
 Library  ../lib/UtilsLibrary.py
 Library  PlatformLibrary  managed_by_operator=true
 Library  RequestsLibrary
@@ -130,3 +131,34 @@ Compare Images From Resources With Dd
       ${resource_image}=  Get Resource Image  ${type}  ${name}  ${KUBERNETES_NAMESPACE}  ${container_name}
       Should Be Equal  ${resource_image}  ${image}
     END
+
+Wait until task ${name} has state ${state}
+    Wait Until Keyword Succeeds    30x    2s    Task must have state    ${name}    ${state}
+
+Task must have state
+    [Arguments]    ${name}    ${state}
+    ${TASK}=    Get task    ${name}
+    Should Be Equal    ${state}    ${TASK.state}
+
+*** Keywords ***
+Set access token lifespan
+    [Documentation]    Updates access.token.lifespan (seconds) for a given
+    ...    Keycloak client via the Admin REST API. Used to accelerate
+    ...    token-expiry scenarios instead of waiting for the real TTL.
+    [Arguments]    ${client_id}    ${lifespan_seconds}
+    ${admin_token}=    Get keycloak admin token
+    ${client_uuid}=    Get keycloak client uuid    ${client_id}    ${admin_token}
+    ${representation}=    Get keycloak client representation    ${client_uuid}    ${admin_token}
+    Set To Dictionary    ${representation}[attributes]    access.token.lifespan=${lifespan_seconds}
+    Update keycloak client    ${client_uuid}    ${representation}    ${admin_token}
+
+Restore access token lifespan
+    [Arguments]    ${client_id}    ${original_lifespan_seconds}
+    Set access token lifespan    ${client_id}    ${original_lifespan_seconds}
+
+*** Keywords ***
+Warm oauth2 token cache and get token
+    ${EX_INPUT}=    Create Dictionary    url=${OWN_URL}/oauth2
+    Recreate the oauth2_http_action workflow, start with ${EX_INPUT} and wait SUCCESS state
+    ${TOKEN}=    await rest
+    RETURN    ${TOKEN}
