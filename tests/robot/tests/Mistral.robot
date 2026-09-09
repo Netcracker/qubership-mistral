@@ -671,7 +671,7 @@ Test timeout doesn't change finished executions state
 
     Wait until the execution will has SUCCESS state
 
-    Sleep    130s
+    Sleep    65s
     state of task1 task must be equal SUCCESS
 
 
@@ -816,26 +816,26 @@ DBaaS PG Credentials And Properties Are In Sync
 
 E2E operation tracing
     [Tags]    basic
-    Recreate the sleep_120s workflow
+    Recreate the sleep_60s workflow
 
     ${EX_ID_1}=  Generate uuid
     ${EX_ID_2}=  Generate uuid
 
-    Create execution  sleep_120s  ex_id=${EX_ID_1}
+    Create execution  sleep_60s  ex_id=${EX_ID_1}
     Wait until task t1 has state RUNNING
 
     Pause execution
     Wait until the execution will has PAUSED state
 
-    Create execution  sleep_120s  ex_id=${EX_ID_2}
+    Create execution  sleep_60s  ex_id=${EX_ID_2}
     Wait until task t1 has state RUNNING
 
     Execution has state  ${EX_ID_1}  PAUSED
 
     Resume execution  ${EX_ID_1}
 
-    Wait Until Keyword Succeeds  60x  2s  Execution has state  ${EX_ID_1}  SUCCESS
-    Wait Until Keyword Succeeds  60x  2s  Execution has state  ${EX_ID_2}  SUCCESS
+    Wait Until Keyword Succeeds  30x  2s  Execution has state  ${EX_ID_1}  SUCCESS
+    Wait Until Keyword Succeeds  30x  2s  Execution has state  ${EX_ID_2}  SUCCESS
 
     ${T1_EX1}=  Get task  t1  ${EX_ID_1}
     ${T2_EX1}=  Get task  t2  ${EX_ID_1}

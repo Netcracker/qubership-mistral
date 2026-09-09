@@ -349,3 +349,20 @@ A possible solution could be to increase the number of replicas, or to increase 
 **Solution**:
 
 To fix problems related to RabbitMQ, refer to the **RabbitMQ Troubleshooting** section in the _Cloud Platform Troubleshooting Guide_.
+
+
+## Expected Error: InvalidCatalogNameError on Initial Startup of Bluegreen Agent
+
+### Problem
+During the first startup of `bluegreen-agent` (in `mistral-operator`), the container logs may show the following error and force a single container restart:
+
+```text
+asyncpg.exceptions.InvalidCatalogNameError: database <mistral_db_name> does not exist
+ERROR: Application startup failed. Exiting.
+```
+### Expected Behavior:
+This error can be safely ignored.
+
+It occurs on initial initialization when the mistral database has not yet been provisioned or created.
+
+The operator automatically restarts, initializes the database, and resumes normal execution without manual intervention.
