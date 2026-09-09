@@ -3,4 +3,4 @@ timeout_async_action_complete_before:
   tasks:
     task1:
       action: std.async_noop
-      timeout: 120
+      timeout: 60

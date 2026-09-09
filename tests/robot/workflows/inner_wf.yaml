@@ -1,0 +1,10 @@
+version: '2.0'
+
+inner_wf:
+  input:
+    - a
+    - b
+
+  tasks:
+    task1:
+      action: std.noop

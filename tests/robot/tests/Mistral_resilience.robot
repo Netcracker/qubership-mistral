@@ -138,7 +138,9 @@ Assert Execution Has Propagated Headers
 
 Restore Custom Config
     [Documentation]  Restores the configmap key captured by Set Custom Config Params And Restart
-    ...  and restarts all Mistral pods.
+    ...  and restarts all Mistral pods. No-op if no config was patched.
+    ${key_set}=    Run Keyword And Return Status    Variable Should Exist    ${ORIGINAL_CONFIG_KEY}
+    Return From Keyword If    not ${key_set}
     Patch Configmap Value  ${MISTRAL_CONFIGMAP}  ${ORIGINAL_CONFIG_KEY}  ${ORIGINAL_CONFIG}
     Restart All Mistral Deployments
 
@@ -348,6 +350,7 @@ Start workflow with incorrect input from task
     [Teardown]  Restore Config And Teardown
     Set Custom Config Params And Restart  ${ENGINE_CONFIG_KEY}  engine  start_subworkflows_via_rpc = true
     ${INPUT}=  Create Dictionary  a=a  b=b
+    Recreate the inner_wf workflow
     Recreate the incorrect_input_task workflow and start with ${INPUT}
     wait until execution has state  ERROR  attempt=${30}  wait=${5}
 

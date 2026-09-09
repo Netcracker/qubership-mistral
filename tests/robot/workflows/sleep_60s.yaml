@@ -1,9 +1,9 @@
 version: '2.0'
 
-sleep_120s:
+sleep_60s:
   tasks:
     t1:
-      action: std.sleep seconds=120
+      action: std.sleep seconds=60
       on-complete: [t2]
     t2:
       action: std.noop
