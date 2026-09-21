@@ -1,10 +1,10 @@
 lockfile_version: '1'
-generated_at: '2026-09-14T06:35:58.707221+00:00'
+generated_at: '2026-09-21T06:36:39.795823+00:00'
 apm_version: 0.15.0
 dependencies:
 - repo_url: Netcracker/qubership-ai-packages
   host: github.com
-  resolved_commit: 0e384f374d05bf6dc1900f518312db62e71b71f4
+  resolved_commit: 903d4083bfbda21b1596b2a089d763b2c695ecab
   virtual_path: agent-packages/apm-authoring
   is_virtual: true
   package_type: apm_package
