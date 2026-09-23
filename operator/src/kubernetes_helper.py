@@ -1713,7 +1713,7 @@ class KubernetesHelper:
             filter(lambda x: x.metadata.name == name, config.items))
         return len(exists) != 0
 
-    def check_if_tests_are_failed(self, max_timeout=900):
+    def check_if_tests_are_failed(self, max_timeout=900, since=None):
         time = 0
         result = False
         test_status = None
@@ -1736,10 +1736,19 @@ class KubernetesHelper:
                 MC.MISTRAL_OPERATOR, self._workspace)
             status_conditions = deployment_status.status.conditions
             for condition in status_conditions:
-                if condition.reason == "IntegrationTestsExecutionStatus":
-                    test_status = condition.type
-                    test_status_summary = condition.message
-                    break
+                if condition.reason != "IntegrationTestsExecutionStatus":
+                    continue
+                if since is not None and condition.last_transition_time is not None \
+                        and condition.last_transition_time < since:
+                    logger.info(
+                        "Ignoring stale IntegrationTestsExecutionStatus condition"
+                        " from a previous run (last_transition_time=%s < since=%s).",
+                        condition.last_transition_time, since
+                    )
+                    continue
+                test_status = condition.type
+                test_status_summary = condition.message
+                break
             time = time + 5
 
         if time >= max_timeout:
@@ -2477,9 +2486,11 @@ class KubernetesHelper:
 
         logger.info('Creating robot tests deployment.')
         kopf.adopt(template)
-        self._apps_api.create_namespaced_deployment(
+        created = self._apps_api.create_namespaced_deployment(
             self._workspace, template
         )
+        since = created.metadata.creation_timestamp
+        return since
 
     def generate_robot_tests_pod_template_body(self):
         tests_params = self._spec['integrationTests']
@@ -2961,9 +2972,9 @@ class KubernetesHelper:
             )
         if self.integration_tests_enabled():
             if self.wait_test_result() and not self.run_benchmarks():
-                self.run_tests()
+                since = self.run_tests()
                 max_timeout = self._spec['integrationTests']['waitTestResultTimeout']
-                if self.check_if_tests_are_failed(max_timeout):
+                if self.check_if_tests_are_failed(max_timeout, since=since):
                     self.update_status(
                         MC.Status.FAILED,
                         "Error",
@@ -2982,14 +2993,15 @@ class KubernetesHelper:
                     " Detailed Integration tests result will be logged in " \
                     "mistral-operator logs and mistral-operator deployment status" \
                     " condition IntegrationTestsExecutionStatus, once it is completed."
-                self.run_tests()
+                since = self.run_tests()
                 self.update_status(
                     MC.Status.SUCCESSFUL,
                     "None",
                     message
                 )
                 logger.info(message)
-                Thread(target=self.check_if_tests_are_failed).start()
+                Thread(target=self.check_if_tests_are_failed,
+                       kwargs={"since": since}).start()
 
     def update_disaster_recovery_status(self, mode=None, status=None, message=None):
         disaster_recovery_status = {
