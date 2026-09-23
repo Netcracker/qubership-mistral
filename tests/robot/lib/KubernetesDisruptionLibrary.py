@@ -160,7 +160,7 @@ class KubernetesDisruptionLibrary:
             logger.info(f"Force-deleted pod {pod.metadata.name}")
 
     def wait_pods_ready(self, deployment_name, expected_replicas, timeout=300, namespace=None):
-        """Wait until deployment has expected ready replicas."""
+        """Wait until deployment has fully rolled out to expected_replicas."""
         self._ensure_k8s()
         ns = namespace or self._namespace
         start_time = time.time()
@@ -171,28 +171,32 @@ class KubernetesDisruptionLibrary:
             status = deployment.status
             spec_generation = deployment.metadata.generation
             observed_generation = status.observed_generation or 0
+            total_replicas = status.replicas or 0
             updated_replicas = status.updated_replicas or 0
-            ready_replicas = status.ready_replicas or 0
+            available_replicas = status.available_replicas or 0
 
             rollout_seen = observed_generation >= spec_generation
             rollout_complete = (
                 rollout_seen
                 and updated_replicas == expected_replicas
-                and ready_replicas == expected_replicas
+                and total_replicas == updated_replicas
+                and available_replicas == expected_replicas
             )
 
             if rollout_complete:
                 logger.info(
                     f"Deployment {deployment_name} rollout complete: "
-                    f"{ready_replicas}/{expected_replicas} ready, "
-                    f"{updated_replicas}/{expected_replicas} updated"
+                    f"{available_replicas}/{expected_replicas} available, "
+                    f"{updated_replicas}/{expected_replicas} updated, "
+                    f"{total_replicas} total"
                 )
                 return True
 
             logger.debug(
                 f"Waiting for {deployment_name} rollout: "
-                f"ready={ready_replicas}/{expected_replicas}, "
+                f"available={available_replicas}/{expected_replicas}, "
                 f"updated={updated_replicas}/{expected_replicas}, "
+                f"total={total_replicas}, "
                 f"observed_generation={observed_generation}/{spec_generation}"
             )
             time.sleep(5)
