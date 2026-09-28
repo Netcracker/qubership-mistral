@@ -163,7 +163,7 @@ disasterRecovery:
   priorityClassName: ""
 
 
-mistralReadyTimeout: 90
+mistralReadyTimeout: 300
 
 integrationTests:
   enabled: False

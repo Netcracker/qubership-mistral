@@ -59,7 +59,7 @@ The general failure signatures are:
 
 ### 2. Tests fail immediately with connection/API errors
 
-- The test pod waits for all Mistral deployments (`app=mistral`) to be ready before running Robot, using its own hardcoded 300s timeout (`mistral_pods_checker.py`) — this is independent of `mistralReadyTimeout`, which instead controls how long the operator waits for Mistral before deploying the test pod and reporting CR status (default 90s).
+- The test pod waits for all Mistral deployments (`app=mistral`) to be ready before running Robot, using its own hardcoded 300s timeout (`mistral_pods_checker.py`) — this is independent of `mistralReadyTimeout`, which instead controls how long the operator waits for Mistral before deploying the test pod and reporting CR status (default 300s).
 - Verify Mistral pods are actually ready
 - If a Mistral service is not ready, fix that service first; the robot reference does not replace general Mistral troubleshooting.
 

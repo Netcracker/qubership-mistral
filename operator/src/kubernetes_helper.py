@@ -2444,7 +2444,7 @@ class KubernetesHelper:
             replicas = 1
         return ready_replicas == replicas
 
-    def get_mistral_ready_timeout(self, default=90):
+    def get_mistral_ready_timeout(self, default=300):
         if 'mistralReadyTimeout' in self._spec:
             return self._spec['mistralReadyTimeout']
         legacy_value = self._spec.get('integrationTests', {}).get('mistralReadyTimeout')
