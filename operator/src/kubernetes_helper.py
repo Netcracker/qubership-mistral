@@ -2444,8 +2444,20 @@ class KubernetesHelper:
             replicas = 1
         return ready_replicas == replicas
 
+    def get_mistral_ready_timeout(self, default=90):
+        if 'mistralReadyTimeout' in self._spec:
+            return self._spec['mistralReadyTimeout']
+        legacy_value = self._spec.get('integrationTests', {}).get('mistralReadyTimeout')
+        if legacy_value is not None:
+            logger.warning(
+                "integrationTests.mistralReadyTimeout is deprecated and will be removed "
+                "in a future release, use spec.mistralReadyTimeout instead."
+            )
+            return legacy_value
+        return default
+
     def wait_mistral_ready(self, check_interval=10):
-        wait_time = self._spec['integrationTests']['mistralReadyTimeout']
+        wait_time = self.get_mistral_ready_timeout()
         mistral_ready = False
         time = 0
         while not mistral_ready and time < wait_time:

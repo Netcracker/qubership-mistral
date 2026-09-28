@@ -190,13 +190,16 @@ spec:
     securityContext:
       {{- include "restricted.integrationTestsPodSecurityContext" . | nindent 6 }}
       {{- include "restricted.platformPodSecurityContext" (dict "platform" $platform "securityContext" .Values.integrationTests.securityContext) | nindent 6 }}
+    {{ if .Values.integrationTests.mistralReadyTimeout }}
     mistralReadyTimeout: {{ .Values.integrationTests.mistralReadyTimeout }}
+    {{ end }}
     {{ if .Values.integrationTests.prometheusUrl }}
     prometheusUrl: {{ .Values.integrationTests.prometheusUrl }}
     {{ end }}
     {{- if .Values.integrationTests.priorityClassName }}
     priorityClassName: {{ .Values.integrationTests.priorityClassName }}
     {{- end }}
+  mistralReadyTimeout: {{ .Values.mistralReadyTimeout }}
   mistralCommonParams:
     secret_change: {{ .Values.mistralCommonParams.secret_change }}
     defaultProjectId: {{ .Values.mistralCommonParams.defaultProjectId  | quote }}

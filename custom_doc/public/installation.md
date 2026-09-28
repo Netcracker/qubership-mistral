@@ -286,6 +286,7 @@ The general parameters used for the configurations are specified in the followin
 |Parameter   |Type  | Mandatory | Default value                 | Description                                                                                                                     |
 |------------|------|-----------|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
 |mistral.dockerImage     |string| yes       |                               | This parameter specifies the Mistral image.                                                                                     |
+|mistralReadyTimeout|int|no| 90 | This parameter specifies the waiting time, in seconds, for Mistral to be ready before the operator starts integration tests (if enabled) and reports the MistralService CR status.  |
 |mistral.imagePullPolicy     |string| no        |                               | This parameter specifies the Mistral imagePullPolicy.                                                                           |
 |mistralCommonParams.debugLog|bool| no        | 'False'                       | This parameter specifies whether the debug log is enabled.                                                                      |
 |mistralCommonParams.postgres.host|string| yes       | 'pg-patroni.postgres-service' | This parameter specifies the Postrges host.                                                                                     |
@@ -707,7 +708,7 @@ The Integration Tests parameters are as follows:
 |integrationTests.runBenchmarks|bool|no|False|This parameter specifies whether Benchmark Tests should be run.|
 |integrationTests.waitTestResultOnJob|bool|no|False|This parameter specifies whether to wait for the integration tests' result on the job.|
 |integrationTests.waitTestResultTimeout|int|no|900|This parameter specifies the waiting time for integration tests' results.|
-|integrationTests.mistralReadyTimeout|int|no|90|This parameter specifies the waiting time for mistral to be ready before starting tests.|
+|integrationTests.mistralReadyTimeout|int|no|not set|**Deprecated**, use the top-level `mistralReadyTimeout` parameter instead. Ignored when `mistralReadyTimeout` is set. Will be removed in a future release.|
 |integrationTests.fsGroup|int|no||This parameter specifies a specific fsGroup.|
 |integrationTests.runAsUser|int|no||This parameter specifies a specific user.|
 |integrationTests.priorityClassName|string|no|""|The priority class to be used to assign priority to Mistral Tests pod. Priority class should be created beforehand. For more information, refer to https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/.|
