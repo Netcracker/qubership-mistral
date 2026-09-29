@@ -2444,7 +2444,7 @@ class KubernetesHelper:
             replicas = 1
         return ready_replicas == replicas
 
-    def get_mistral_ready_timeout(self, default=300):
+    def get_mistral_ready_timeout(self, default=90):
         if 'mistralReadyTimeout' in self._spec:
             return self._spec['mistralReadyTimeout']
         legacy_value = self._spec.get('integrationTests', {}).get('mistralReadyTimeout')
@@ -2967,15 +2967,22 @@ class KubernetesHelper:
             body=body
         )
 
-    def set_deploy_status_and_run_tests(self):
+    def set_deploy_status_and_run_tests(self, retry=0, max_retries=4):
         if not self.wait_mistral_ready():
+            if retry >= max_retries - 1:
+                self.update_status(
+                    MC.Status.FAILED,
+                    "Error",
+                    "Mistral service unavailable"
+                )
+                sleep(5)
+                raise kopf.PermanentError("Mistral service unavailable.")
             self.update_status(
-                MC.Status.FAILED,
-                "Error",
-                "Mistral service unavailable"
+                MC.Status.IN_PROGRESS,
+                "",
+                "Mistral service not yet available, retrying"
             )
-            sleep(5)
-            raise kopf.PermanentError("Mistral service unavailable.")
+            raise kopf.TemporaryError("Mistral service unavailable.", delay=90)
         if not self.wait_test_result() or not self.integration_tests_enabled():
             self.update_status(
                 MC.Status.SUCCESSFUL,

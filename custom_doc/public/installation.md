@@ -286,7 +286,7 @@ The general parameters used for the configurations are specified in the followin
 |Parameter   |Type  | Mandatory | Default value                 | Description                                                                                                                     |
 |------------|------|-----------|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
 |mistral.dockerImage     |string| yes       |                               | This parameter specifies the Mistral image.                                                                                     |
-|mistralReadyTimeout|int|no| 300 | This parameter specifies the waiting time, in seconds, for Mistral to be ready before the operator starts integration tests (if enabled) and reports the MistralService CR status.  |
+|mistralReadyTimeout|int|no| 90 | This parameter specifies the waiting time, in seconds, for Mistral to be ready before the operator starts integration tests (if enabled) and reports the MistralService CR status.  |
 |mistral.imagePullPolicy     |string| no        |                               | This parameter specifies the Mistral imagePullPolicy.                                                                           |
 |mistralCommonParams.debugLog|bool| no        | 'False'                       | This parameter specifies whether the debug log is enabled.                                                                      |
 |mistralCommonParams.postgres.host|string| yes       | 'pg-patroni.postgres-service' | This parameter specifies the Postrges host.                                                                                     |
