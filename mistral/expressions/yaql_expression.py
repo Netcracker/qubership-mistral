@@ -17,6 +17,7 @@
 from collections import abc as collections_abc
 import inspect
 import re
+import threading
 
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
@@ -38,7 +39,7 @@ _YAQL_CONF = cfg.CONF.yaql
 
 INLINE_YAQL_REGEXP = '<%.*?%>'
 
-YAQL_ENGINE = None
+_YAQL_ENGINE_LOCAL = threading.local()
 
 ROOT_YAQL_CONTEXT = None
 
@@ -100,16 +101,18 @@ def create_yaql_engine_class(keyword_operator, allow_delegates,
 
 
 def get_yaql_engine_class():
-    global YAQL_ENGINE
+    engine = getattr(_YAQL_ENGINE_LOCAL, 'engine', None)
 
-    if YAQL_ENGINE is not None:
-        return YAQL_ENGINE
+    if engine is not None:
+        return engine
 
-    YAQL_ENGINE = create_yaql_engine_class(
+    engine = create_yaql_engine_class(
         _YAQL_CONF.keyword_operator,
         _YAQL_CONF.allow_delegates,
         get_yaql_engine_options()
     )
+
+    _YAQL_ENGINE_LOCAL.engine = engine
 
     LOG.info(
         "YAQL engine has been initialized with the options: \n%s",
@@ -122,7 +125,7 @@ def get_yaql_engine_class():
         )
     )
 
-    return YAQL_ENGINE
+    return engine
 
 
 def _sanitize_yaql_result(result):
