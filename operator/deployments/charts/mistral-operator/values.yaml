@@ -162,6 +162,9 @@ disasterRecovery:
   securityContext: {}
   priorityClassName: ""
 
+
+mistralReadyTimeout: 90
+
 integrationTests:
   enabled: False
   runTestsOnly: False
@@ -169,6 +172,7 @@ integrationTests:
   waitTestResultOnJob: False
   waitTestResultTimeout: 900
   dockerImage: "ghcr.io/netcracker/qubership-mistral-tests:main"
+  # Deprecated: use the top-level mistralReadyTimeout instead. Will be removed in a future release.
   mistralReadyTimeout: 90
   securityContext: {}
   prometheusUrl: ""

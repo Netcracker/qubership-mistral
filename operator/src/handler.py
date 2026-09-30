@@ -29,6 +29,7 @@ logger.info('OPERATOR_DELETE_RESOURCES is set '
 
 OPTIONAL_DELETE = True
 FORCED_UPGRADE = True
+MISTRAL_READY_RETRIES = 4
 if MC.OPERATOR_NEED_TO_DELETE_RESOURCES in MC.POSITIVE_VALUES:
     OPTIONAL_DELETE = False
 
@@ -67,8 +68,8 @@ def validate_spec(spec):
     pass
 
 
-@kopf.on.create(MC.CR_GROUP, MC.CR_VERSION, MC.CR_PLURAL)
-def on_create(body, meta, spec, status, **kwargs):
+@kopf.on.create(MC.CR_GROUP, MC.CR_VERSION, MC.CR_PLURAL, retries=MISTRAL_READY_RETRIES)
+def on_create(body, meta, spec, status, retry, **kwargs):
     kub_helper = KubernetesHelper(spec)
     logger.info("New CRD is created")
     validate_spec(spec)
@@ -96,7 +97,7 @@ def on_create(body, meta, spec, status, **kwargs):
             kub_helper.delete_existing_queues()
         kub_helper.reconcile_deployments(True)
     kub_helper.create_services()
-    kub_helper.set_deploy_status_and_run_tests()
+    kub_helper.set_deploy_status_and_run_tests(retry=retry, max_retries=MISTRAL_READY_RETRIES)
 
 
 def spec_filter_with_excluded_field(diff, excluded_field: str) -> bool:
@@ -133,8 +134,8 @@ def exclude_disaster_recovery_field(spec, diff, **kwargs):
     return spec_filter_with_excluded_field(diff, 'disasterRecovery')
 
 
-@kopf.on.update(MC.CR_GROUP, MC.CR_VERSION, MC.CR_PLURAL, when=exclude_disaster_recovery_field)
-def on_update(body, meta, spec, status, old, new, diff, **kwargs):
+@kopf.on.update(MC.CR_GROUP, MC.CR_VERSION, MC.CR_PLURAL, when=exclude_disaster_recovery_field, retries=MISTRAL_READY_RETRIES)
+def on_update(body, meta, spec, status, old, new, diff, retry, **kwargs):
     if not check_for_operator_id(spec):
         logger.info("New Mistral operator deployment discovered, awaiting deployment"
                     " readiness is established.")
@@ -167,7 +168,7 @@ def on_update(body, meta, spec, status, old, new, diff, **kwargs):
         sleep(5)
         raise kopf.PermanentError("please create Mistral secret.")
     if kub_helper.integration_tests_enabled() and kub_helper.run_tests_only():
-        kub_helper.set_deploy_status_and_run_tests()
+        kub_helper.set_deploy_status_and_run_tests(retry=retry, max_retries=MISTRAL_READY_RETRIES)
         return
     idp_updated = kub_helper.generate_idp_params()
     if kub_helper.is_deployment_present(MC.MISTRAL_TESTS):
@@ -184,7 +185,7 @@ def on_update(body, meta, spec, status, old, new, diff, **kwargs):
             kub_helper.delete_existing_queues()
         kub_helper.reconcile_deployments(False)
     kub_helper.create_services()
-    kub_helper.set_deploy_status_and_run_tests()
+    kub_helper.set_deploy_status_and_run_tests(retry=retry, max_retries=MISTRAL_READY_RETRIES)
 
 
 @kopf.on.delete(MC.CR_GROUP, MC.CR_VERSION, MC.CR_PLURAL, optional=OPTIONAL_DELETE)

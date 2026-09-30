@@ -301,6 +301,9 @@
                 }
             }
         },
+        "mistralReadyTimeout": {
+            "type": "integer"
+        },
         "integrationTests": {
             "type": "object",
             "additionalProperties": true,

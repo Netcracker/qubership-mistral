@@ -2444,8 +2444,20 @@ class KubernetesHelper:
             replicas = 1
         return ready_replicas == replicas
 
+    def get_mistral_ready_timeout(self, default=90):
+        if 'mistralReadyTimeout' in self._spec:
+            return self._spec['mistralReadyTimeout']
+        legacy_value = self._spec.get('integrationTests', {}).get('mistralReadyTimeout')
+        if legacy_value is not None:
+            logger.warning(
+                "integrationTests.mistralReadyTimeout is deprecated and will be removed "
+                "in a future release, use spec.mistralReadyTimeout instead."
+            )
+            return legacy_value
+        return default
+
     def wait_mistral_ready(self, check_interval=10):
-        wait_time = self._spec['integrationTests']['mistralReadyTimeout']
+        wait_time = self.get_mistral_ready_timeout()
         mistral_ready = False
         time = 0
         while not mistral_ready and time < wait_time:
@@ -2955,15 +2967,22 @@ class KubernetesHelper:
             body=body
         )
 
-    def set_deploy_status_and_run_tests(self):
+    def set_deploy_status_and_run_tests(self, retry=0, max_retries=4):
         if not self.wait_mistral_ready():
+            if retry >= max_retries - 1:
+                self.update_status(
+                    MC.Status.FAILED,
+                    "Error",
+                    "Mistral service unavailable"
+                )
+                sleep(5)
+                raise kopf.PermanentError("Mistral service unavailable.")
             self.update_status(
-                MC.Status.FAILED,
-                "Error",
-                "Mistral service unavailable"
+                MC.Status.IN_PROGRESS,
+                "",
+                "Mistral service not yet available, retrying"
             )
-            sleep(5)
-            raise kopf.PermanentError("Mistral service unavailable.")
+            raise kopf.TemporaryError("Mistral service unavailable.", delay=90)
         if not self.wait_test_result() or not self.integration_tests_enabled():
             self.update_status(
                 MC.Status.SUCCESSFUL,

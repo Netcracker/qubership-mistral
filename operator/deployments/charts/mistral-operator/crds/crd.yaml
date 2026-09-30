@@ -276,6 +276,10 @@ spec:
                     mistralReadyTimeout:
                       format: int64
                       type: integer
+                      description: >-
+                        Deprecated: use top level mistralReadyTimeout instead. This
+                        field is ignored when top level mistralReadyTimeout is set
+                        and will be removed in a future release.
                     securityContext:
                       x-kubernetes-preserve-unknown-fields: true
                       type: object
@@ -285,6 +289,13 @@ spec:
                     priorityClassName:
                       type: string
                   type: object
+                mistralReadyTimeout:
+                  format: int64
+                  type: integer
+                  description: >-
+                    Time, in seconds, the operator waits for all Mistral
+                    services to become ready before reporting the
+                    MistralService CR status.
                 mistralCommonParams:
                   properties:
                     secret_change:
@@ -5871,7 +5882,18 @@ spec:
                     mistralReadyTimeout:
                       format: int64
                       type: integer
+                      description: >-
+                        Deprecated: use top level mistralReadyTimeout instead. This
+                        field is ignored when top level mistralReadyTimeout is set
+                        and will be removed in a future release.
                   type: object
+                mistralReadyTimeout:
+                  format: int64
+                  type: integer
+                  description: >-
+                    Time, in seconds, the operator waits for all Mistral
+                    services to become ready before reporting the
+                    MistralService CR status.
                 mistralCommonParams:
                   properties:
                     secret_change:
