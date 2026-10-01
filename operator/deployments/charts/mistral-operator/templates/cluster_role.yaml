@@ -1,4 +1,4 @@
-{{- if eq (include "mistral.k8sSaAuthEnabled" .) "true" }}
+{{- if and (eq (include "mistral.k8sSaAuthEnabled" .) "true") (not (lookup "rbac.authorization.k8s.io/v1" "ClusterRole" "" "mistral-token-reviewer")) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

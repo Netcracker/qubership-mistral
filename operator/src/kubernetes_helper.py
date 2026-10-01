@@ -761,6 +761,12 @@ class KubernetesHelper:
                         key='auth-type',
                         name=MC.COMMON_CONFIGMAP))),
             V1EnvVar(
+                name='M2M_AUTH_MODE',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='m2m-auth-mode',
+                        name=MC.COMMON_CONFIGMAP))),
+            V1EnvVar(
                 name='AUTH_PROJECT_RULES',
                 value_from=V1EnvVarSource(
                     config_map_key_ref=V1ConfigMapKeySelector(
@@ -883,7 +889,8 @@ class KubernetesHelper:
                     key=MC.CUSTOM_CONFIG_API, path=MC.ADDITIONAL_CONFIGS_FILE_PATH
                 )
             )
-            if self.is_auth_enabled() and self.get_auth_type() == 'k8s-sa':
+            if self.is_auth_enabled() and \
+                    self.get_effective_auth_type() in ('k8s-sa', 'hybrid'):
                 pod_template_spec.spec.service_account_name = \
                     MC.API_SERVICE_ACCOUNT
 
@@ -1218,6 +1225,12 @@ class KubernetesHelper:
                         key='auth-type',
                         name=MC.COMMON_CONFIGMAP))),
             V1EnvVar(
+                name='M2M_AUTH_MODE',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='m2m-auth-mode',
+                        name=MC.COMMON_CONFIGMAP))),
+            V1EnvVar(
                 name='AUTH_PROJECT_RULES',
                 value_from=V1EnvVarSource(
                     config_map_key_ref=V1ConfigMapKeySelector(
@@ -1354,17 +1367,21 @@ class KubernetesHelper:
             return res['keys'][0]['e'], res['keys'][0]['n']
 
         auth_enabled = self.is_auth_enabled()
-        auth_type = self._spec['mistralCommonParams']['auth']['type']
+        effective_auth_type = self.get_effective_auth_type()
 
         if not auth_enabled:
             logger.info("Auth is not enabled.")
             return
 
-        if str(auth_type).lower() == 'k8s-sa':
-            logger.info(
-                "Auth type is k8s-sa, skipping IDP params generation."
-            )
+        if effective_auth_type == 'k8s-sa':
+            logger.info("Skipping IDP params: pure k8s-sa auth configured.")
             return
+
+        # hybrid validates with keycloak-oidc as fallback; JWK is still needed
+        auth_type = (
+            'keycloak-oidc' if effective_auth_type == 'hybrid'
+            else effective_auth_type
+        )
 
         idp_server = self._spec['mistralCommonParams'].get('idpServer')
         idp_external_server = self._spec['mistralCommonParams'].get('idpExternalServer')
@@ -1664,6 +1681,27 @@ class KubernetesHelper:
             self._spec['mistralCommonParams']['auth'].get('type', '')
         ).lower()
 
+    def get_m2m_auth_mode(self):
+        return str(
+            self._spec['mistral'].get('m2mAuthMode', '')
+        ).lower()
+
+    def get_effective_auth_type(self):
+        """Return the resolved auth type, applying m2mAuthMode override if set.
+
+        Mirrors _apply_m2m_auth_mode_override() in mistral/cmd/launch.py so
+        the operator and the application agree on the effective auth type.
+        """
+        _M2M_MODE_TO_AUTH_TYPE = {
+            'legacy': 'keycloak-oidc',
+            'k8s': 'k8s-sa',
+            'hybrid': 'hybrid',
+        }
+        m2m_mode = self.get_m2m_auth_mode()
+        if m2m_mode:
+            return _M2M_MODE_TO_AUTH_TYPE.get(m2m_mode, self.get_auth_type())
+        return self.get_auth_type()
+
     def is_cloud_core_integration_enabled(self):
         return self._spec['mistral']['cloudCoreIntegrationEnabled']
 
@@ -1787,7 +1825,8 @@ class KubernetesHelper:
         configmap = self._spec['mistralCommonParams']
         configmapdata = {
             'auth-enable': str(configmap['auth']['enable']),
-            'auth-type': str(configmap['auth']['type']),
+            'auth-type': self.get_effective_auth_type(),
+            'm2m-auth-mode': str(self._spec['mistral'].get('m2mAuthMode', '')),
             'auth-project-rules': str(configmap['auth'].get('projectRules', '')),
             'default-project-id': str(configmap.get('defaultProjectId', '')),
             'dbaas-agent-url': str(configmap['dbaas']['agentUrl']),
@@ -2553,6 +2592,15 @@ class KubernetesHelper:
                 value_from=V1EnvVarSource(
                     config_map_key_ref=V1ConfigMapKeySelector(
                         key='auth-type',
+                        name=MC.COMMON_CONFIGMAP
+                    )
+                )
+            ),
+            V1EnvVar(
+                name='M2M_AUTH_MODE',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='m2m-auth-mode',
                         name=MC.COMMON_CONFIGMAP
                     )
                 )

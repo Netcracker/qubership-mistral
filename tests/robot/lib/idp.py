@@ -308,6 +308,9 @@ class K8sSALibrary(IdpBase):
         with open(self._token_path, 'r') as f:
             return f.read().strip()
 
+    def get_multitenancy_token(self, tenant_name, username, password):
+        pass
+
 
 def error_handler(parser, message):
     print(message)

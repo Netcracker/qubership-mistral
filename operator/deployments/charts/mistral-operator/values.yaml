@@ -185,7 +185,7 @@ bluegreenAgent:
     requests:
       cpu: 50m
       memory: 100Mi
-
+M2M_AUTH_MODE: "legacy"
 mistralCommonParams:
   secret_change: 1
   defaultProjectId: "<default-project>"

@@ -56,7 +56,19 @@ auth_type_opt = cfg.StrOpt(
     'auth_type',
     default='keystone',
     help=_('Authentication type (valid options: keystone, keycloak-oidc, '
-           'k8s-sa, mitreid)')
+           'k8s-sa, mitreid, hybrid). The hybrid type tries k8s-sa first '
+           'and falls back to keycloak-oidc on failure. This value is '
+           'automatically overridden at startup when m2m_auth_mode is set.')
+)
+
+m2m_auth_mode_opt = cfg.StrOpt(
+    'm2m_auth_mode',
+    help=_(
+        'In operator-managed deployments '
+        'this is resolved into auth_type by the operator before the '
+        'application starts, so the application never reads it. '
+        'Valid values: legacy (keycloak-oidc), hybrid, k8s (k8s-sa).'
+    )
 )
 
 auth_opts = [
@@ -779,6 +791,15 @@ keycloak_oidc_opts = [
     )
 ]
 
+k8s_sa_opts = [
+    cfg.StrOpt(
+        'token_path',
+        default='/var/run/secrets/kubernetes.io/serviceaccount/token',
+        help=_('Path to the Kubernetes service account token file used for '
+               'outbound authenticated requests.')
+    ),
+]
+
 oauth2_opts = [
     cfg.StrOpt(
         'idp_url',
@@ -1029,6 +1050,7 @@ RABBITMQ_GROUP = 'rabbitmq'
 
 CONF.register_opt(wf_trace_log_name_opt)
 CONF.register_opt(auth_type_opt)
+CONF.register_opt(m2m_auth_mode_opt)
 CONF.register_opt(default_project_id_opt)
 CONF.register_opt(scheduler_type_opt)
 CONF.register_opt(js_impl_opt)
@@ -1078,6 +1100,7 @@ CLI_OPTS = [
 default_group_opts = CLI_OPTS + [
     wf_trace_log_name_opt,
     auth_type_opt,
+    m2m_auth_mode_opt,
     default_project_id_opt,
     scheduler_type_opt,
     js_impl_opt,

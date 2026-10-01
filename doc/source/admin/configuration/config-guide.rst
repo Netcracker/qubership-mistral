@@ -37,8 +37,42 @@ directory.
     auth_url = https://<keycloak-server-host>:<keycloak-server-port>/auth
 
    Property ``auth_type`` is assigned to ``keystone`` by default.
+   Valid values: ``keystone``, ``keycloak-oidc``, ``k8s-sa``, ``mitreid``,
+   ``hybrid``.
    If SSL/TLS verification needs to be disabled then ``insecure = True``
    should also be added under ``[keycloak_oidc]`` group.
+
+#. For Kubernetes ServiceAccount token authentication, set::
+
+    auth_type = k8s-sa
+
+   In mixed environments where both Kubernetes ServiceAccount tokens and
+   Keycloak OIDC tokens may be presented, use the ``hybrid`` mode::
+
+    auth_type = hybrid
+
+   With ``hybrid``, Mistral validates the token against the Kubernetes SA
+   first; if that fails it falls back to Keycloak OIDC.
+
+#. ``m2m_auth_mode`` is a convenience option that automatically sets
+   ``auth_type`` at startup. It is intended for operator deployments and
+   takes precedence over any ``auth_type`` value in the config file:
+
+   .. list-table::
+      :header-rows: 1
+
+      * - ``m2m_auth_mode``
+        - Effective ``auth_type``
+      * - ``legacy``
+        - ``keycloak-oidc``
+      * - ``k8s``
+        - ``k8s-sa``
+      * - ``hybrid``
+        - ``hybrid``
+
+   Example::
+
+    m2m_auth_mode = hybrid
 
 #. If you want to configure SSL for Mistral API server, provide following
    options in config file::

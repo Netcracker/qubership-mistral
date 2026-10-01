@@ -23,6 +23,7 @@ spec:
       host: {{ .Values.mistral.ingress.host }}
       {{- end}}
     cloudCoreIntegrationEnabled: {{ default "false" .Values.CLOUD_CORE_INTEGRATION_ENABLED }}
+    m2mAuthMode: {{ default "legacy" .Values.M2M_AUTH_MODE }}
     lastUpdate: {{ now }}
     tls:
       enabled: {{ default "false" .Values.mistral.tls.enabled }}

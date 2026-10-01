@@ -1,5 +1,19 @@
 {{/* vim: set filetype=mustache: */}}
 {{/*
+Resolve the effective auth type from M2M_AUTH_MODE (if set) or auth.type.
+This is the single resolution point — all other helpers and templates use this.
+*/}}
+{{- define "mistral.effectiveAuthType" -}}
+{{- $m2mMode := default "" .Values.M2M_AUTH_MODE | lower -}}
+{{- $authType := default "keycloak-oidc" .Values.mistralCommonParams.auth.type | lower -}}
+{{- if eq $m2mMode "legacy" -}}keycloak-oidc
+{{- else if eq $m2mMode "k8s" -}}k8s-sa
+{{- else if eq $m2mMode "hybrid" -}}hybrid
+{{- else -}}{{ $authType }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Expand the name of the chart.
 */}}
 {{- define "mistral-operator.name" -}}
@@ -445,12 +459,12 @@ Service Account for Site Manager depending on smSecureAuth
 
 
 {{/*
-Whether k8s-sa auth is enabled (auth.enable=true AND auth.type=k8s-sa)
+Whether k8s-sa auth is enabled (auth.enable=true AND effective auth type is k8s-sa or hybrid).
 */}}
 {{- define "mistral.k8sSaAuthEnabled" -}}
 {{- $auth := toString (default false .Values.mistralCommonParams.auth.enable) | lower -}}
-{{- $authType := default "" .Values.mistralCommonParams.auth.type | lower -}}
-{{- if and (eq $auth "true") (eq $authType "k8s-sa") -}}true{{- end -}}
+{{- $authType := include "mistral.effectiveAuthType" . -}}
+{{- if and (eq $auth "true") (or (eq $authType "k8s-sa") (eq $authType "hybrid")) -}}true{{- end -}}
 {{- end -}}
 
 {{/*
@@ -533,7 +547,7 @@ Determining whether IDP JWK Secrets should be populated
 */}}
 {{- define "idpSecrets.populate" -}}
 {{- $auth := toString (default false .Values.mistralCommonParams.auth.enable) | lower -}}
-{{- $authType := default "" .Values.mistralCommonParams.auth.type | lower -}}
+{{- $authType := include "mistral.effectiveAuthType" . -}}
 {{- if and (eq $auth "true") (ne $authType "k8s-sa") -}}
 {{- if and
   (not (empty .Values.secrets.idpClientId))
