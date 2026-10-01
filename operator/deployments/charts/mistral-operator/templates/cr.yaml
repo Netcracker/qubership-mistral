@@ -206,6 +206,9 @@ spec:
     auth:
       enable: {{ .Values.mistralCommonParams.auth.enable }}
       type: {{ .Values.mistralCommonParams.auth.type }}
+      {{- if .Values.mistralCommonParams.auth.m2mAuthMode }}
+      m2mAuthMode: {{ .Values.mistralCommonParams.auth.m2mAuthMode }}
+      {{- end}}
       {{- if .Values.mistralCommonParams.auth.cloudCoreUsername }}
       cloudCoreUsername: {{ .Values.mistralCommonParams.auth.cloudCoreUsername }}
       {{- end}}

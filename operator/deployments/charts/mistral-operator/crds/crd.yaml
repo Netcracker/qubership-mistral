@@ -307,6 +307,9 @@ spec:
                           type: boolean
                         type:
                           type: string
+                        m2mAuthMode:
+                          type: string
+                          nullable: true
                         cloudCoreUsername:
                           type: string
                           nullable: true
@@ -5905,6 +5908,9 @@ spec:
                           type: boolean
                         type:
                           type: string
+                        m2mAuthMode:
+                          type: string
+                          nullable: true
                         projectRules:
                           type: string
                           nullable: true

@@ -189,6 +189,7 @@ MISTRAL_TLS_CA_PATH = '/opt/mistral/mount_configs/tls/ca.crt'
 
 MISTRAL_LITE_DEPLOYMENT = MISTRAL_LABEL = MISTRAL_SERVICE = "mistral"
 SERVICE_ACCOUNT = MISTRAL_OPERATOR = "mistral-operator"
+API_SERVICE_ACCOUNT = "mistral-api-sa"
 SELECTOR = "mistral-api"
 MISTRAL_CUSTOM_CONFIG_VOLUME = "mistral-custom-config-volume"
 MISTRAL_TLS_CONFIG_VOLUME = "mistral-tls-config-volume"

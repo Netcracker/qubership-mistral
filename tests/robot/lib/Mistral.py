@@ -131,6 +131,8 @@ class Mistral(object):
                                                 client_register_token,
                                                 idp_client_id=idp_client_id,
                                                 idp_client_secret=idp_client_secret)
+            elif self._auth_type == 'k8s-sa':
+                self._idp = idp.K8sSALibrary()
 
         logger.info(f'Mistral parameters: {self.__dict__}')
 

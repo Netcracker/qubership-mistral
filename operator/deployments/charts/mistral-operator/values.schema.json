@@ -378,6 +378,9 @@
                         "type": {
                             "type": "string"
                         },
+                        "m2mAuthMode": {
+                            "type": "string"
+                        },
                         "certs": {
                             "type": "string"
                         },

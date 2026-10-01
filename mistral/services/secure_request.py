@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import base64
+import json
 import time
 
-import time
 from oslo_config import cfg
 from oslo_log import log
 import requests
@@ -134,13 +134,37 @@ def __refresh():
 
     :return:
     """
-    auth_type = cfg.CONF.auth_type
-    if auth_type == 'mitreid':
-        resp_json = _auth_using_mitreid()
-    elif auth_type == 'keycloak-oidc':
-        resp_json = _auth_using_keycloak()
+    m2m_mode = cfg.CONF.m2m_auth_mode
+    if m2m_mode:
+        if m2m_mode == 'legacy':
+            resp_json = _auth_using_keycloak()
+        elif m2m_mode == 'k8s':
+            resp_json = _auth_using_k8s_sa()
+        elif m2m_mode == 'hybrid':
+            try:
+                resp_json = _auth_using_k8s_sa()
+            except Exception as e:
+                LOG.debug(
+                    "K8s SA token unavailable in hybrid mode, "
+                    "falling back to keycloak-oidc: %s", e
+                )
+                resp_json = _auth_using_keycloak()
+        else:
+            raise ValueError(
+                "m2m_auth_mode '{}' is not supported".format(m2m_mode)
+            )
     else:
-        raise ValueError("Auth type {} doesn't support".format(auth_type))
+        auth_type = cfg.CONF.auth_type
+        if auth_type == 'mitreid':
+            resp_json = _auth_using_mitreid()
+        elif auth_type == 'keycloak-oidc':
+            resp_json = _auth_using_keycloak()
+        elif auth_type == 'k8s-sa':
+            resp_json = _auth_using_k8s_sa()
+        else:
+            raise ValueError(
+                "Auth type '{}' is not supported".format(auth_type)
+            )
 
     TOKEN['access_token'] = resp_json.get('access_token', '')
     TOKEN['token_type'] = resp_json.get('token_type', '')
@@ -173,6 +197,29 @@ def _auth_using_keycloak():
     resp.raise_for_status()
 
     return resp.json()
+
+
+def _auth_using_k8s_sa():
+    token_path = cfg.CONF.k8s_sa.token_path
+    with open(token_path, 'r') as f:
+        token = f.read().strip()
+
+    expires_in = 3600
+    try:
+        payload_part = token.split('.')[1]
+        payload_part += '=' * (-len(payload_part) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_part))
+        exp = payload.get('exp')
+        if exp:
+            expires_in = max(0, exp - time.time())
+    except Exception as e:
+        LOG.warning("Could not parse K8s SA token expiry: %s", e)
+
+    return {
+        'access_token': token,
+        'token_type': 'Bearer',
+        'expires_in': expires_in,
+    }
 
 
 def _auth_using_mitreid():
