@@ -192,6 +192,7 @@ mistralCommonParams:
   auth:
     enable: "False"
     type: "keycloak-oidc"
+    m2mAuthMode: "legacy"
     certs: ""
     cloudCoreUsername: ""
     projectRules:

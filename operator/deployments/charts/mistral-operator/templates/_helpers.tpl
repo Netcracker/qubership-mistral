@@ -450,7 +450,8 @@ Whether k8s-sa auth is enabled (auth.enable=true AND auth.type=k8s-sa)
 {{- define "mistral.k8sSaAuthEnabled" -}}
 {{- $auth := toString (default false .Values.mistralCommonParams.auth.enable) | lower -}}
 {{- $authType := default "" .Values.mistralCommonParams.auth.type | lower -}}
-{{- if and (eq $auth "true") (eq $authType "k8s-sa") -}}true{{- end -}}
+{{- $m2mMode := default "legacy" .Values.mistralCommonParams.auth.m2mAuthMode | lower -}}
+{{- if and (eq $auth "true") (or (eq $authType "k8s-sa") (eq $m2mMode "k8s") (eq $m2mMode "hybrid")) -}}true{{- end -}}
 {{- end -}}
 
 {{/*
