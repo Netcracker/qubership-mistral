@@ -2,9 +2,9 @@
 ## This is a YAML-formatted file.
 ## Declare variables to be passed into your templates.
 
+M2M_AUTH_MODE: "legacy"
 # Name of MistralService Custom Resource
 name: mistral-service
-
 operatorImage: "ghcr.io/netcracker/qubership-mistral-operator-img:main"
 operator:
   imagePullPolicy: Always

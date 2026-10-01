@@ -62,7 +62,7 @@ class K8sSAAuthHandler(auth.AuthHandler):
             raise exc.UnauthorizedException(message="Invalid K8s SA token")
 
         user = response.status.user
-        namespace, sa_name = self._parse_namespce_and_username(user.username)
+        namespace, sa_name = self._parse_namespace_and_username(user.username)
 
         claims = self._extract_claims(response.status, namespace, sa_name, token)
 
@@ -121,7 +121,7 @@ class K8sSAAuthHandler(auth.AuthHandler):
         LOG.debug("Auth claims for rule evaluation: %s", claims)
         return claims
 
-    def _parse_namespce_and_username(self, username):
+    def _parse_namespace_and_username(self, username):
         """
         Expected format:
         system:serviceaccount:<namespace>:<name>
