@@ -17,7 +17,7 @@ The general failure signatures are:
 | `integrationTests.runBenchmarks` | When true, sets `RUN_BENCHMARKS=True` in the test pod and the tag filter excludes functional suites (`basic`, `security`, `dr`, `heartbeat`) and runs only `mistral_svt` benchmark tests. When false, `mistral_svt` and `benchmark_skip` tests are excluded. |
 | `integrationTests.waitTestResultOnJob` | When true, the operator blocks reconciliation until tests finish and marks the CR as failed if critical tests fail. When false, the operator marks install successful and checks test status in a background thread. |
 | `integrationTests.waitTestResultTimeout` | How long (seconds) the operator waits for the `mistral-tests` Deployment to report a result before treating it as failed. |
-| `integrationTests.mistralReadyTimeout` | How long (seconds) the test pod waits for all Mistral deployments (`app=mistral`) to be ready before starting Robot execution. |
+| `mistralReadyTimeout` | How long (seconds) the **operator** waits for all Mistral deployments to be ready before deploying the test pod. |
 | `integrationTests.dockerImage` | Test runner image; default is `ghcr.io/netcracker/qubership-mistral-tests:main`. |
 | `integrationTests.prometheusUrl` | Required for `alerts` tests. Sets `PROMETHEUS_URL` env var; if unset, the `alerts` tag is excluded. |
 
@@ -47,7 +47,7 @@ The general failure signatures are:
 - `tests/robot/workflows/` — YAML workflow fixtures loaded by the tests.
 - `tests/robot/lib/` — Python helper libraries (Mistral API client, Kubernetes utils, workflow generators, HTTP mock server).
 - `tests/robot/Dockerfile` and `tests/robot/entrypoint.sh` — build the `mistral-tests` image on top of `ghcr.io/netcracker/qubership-docker-integration-tests`.
-- `tests/robot/mistral_pods_checker.py` — executed at startup to wait for Mistral deployments to become ready (`mistralReadyTimeout` applies here).
+- `tests/robot/mistral_pods_checker.py` — executed at startup to wait for Mistral deployments to become ready. Uses its own hardcoded 300s timeout;
 
 ## Common failure modes and troubleshooting steps
 
@@ -59,7 +59,7 @@ The general failure signatures are:
 
 ### 2. Tests fail immediately with connection/API errors
 
-- The test pod waits for all Mistral deployments (`app=mistral`) to be ready before running Robot. This is controlled by `integrationTests.mistralReadyTimeout` (default 90s).
+- The test pod waits for all Mistral deployments (`app=mistral`) to be ready before running Robot, using its own hardcoded 300s timeout (`mistral_pods_checker.py`) — this is independent of `mistralReadyTimeout`, which instead controls how long the operator waits for Mistral before deploying the test pod and reporting CR status (default 90s).
 - Verify Mistral pods are actually ready
 - If a Mistral service is not ready, fix that service first; the robot reference does not replace general Mistral troubleshooting.
 
