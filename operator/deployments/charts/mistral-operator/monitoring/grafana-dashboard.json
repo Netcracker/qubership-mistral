@@ -2379,9 +2379,6 @@
               {
                 "color": "#3f6833",
                 "value": 1
-              },
-              {
-                "color": "#d44a3a"
               }
             ]
           },
@@ -2505,9 +2502,6 @@
               {
                 "color": "#3f6833",
                 "value": 1
-              },
-              {
-                "color": "#d44a3a"
               }
             ]
           },
@@ -2631,9 +2625,6 @@
               {
                 "color": "#3f6833",
                 "value": 1
-              },
-              {
-                "color": "#d44a3a"
               }
             ]
           },
@@ -2762,9 +2753,6 @@
               {
                 "color": "#3f6833",
                 "value": 1
-              },
-              {
-                "color": "#d44a3a"
               }
             ]
           },
@@ -2886,9 +2874,6 @@
               {
                 "color": "#3f6833",
                 "value": 1
-              },
-              {
-                "color": "#d44a3a"
               }
             ]
           },
@@ -6784,7 +6769,7 @@
             "uid": "$datasource"
           },
           "editorMode": "code",
-          "expr": "sum by (pod)(\r\n  kube_pod_container_resource_limits{namespace=\"$mistral_namespace\", resource=\"memory\",container=~\"mistral-engine\"}\r\n)\r\n",
+          "expr": "sum by (pod)(\r\n  kube_pod_container_resource_limits{namespace=\"$mistral_namespace\", resource=\"memory\",container=~\"mistral-api\"}\r\n)\r\n",
           "hide": false,
           "instant": false,
           "legendFormat": "limit: {{pod}}",
@@ -7249,14 +7234,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#3f6833"
+                "color": "#3f6833",
+                "value": null
               },
               {
                 "color": "#890f02",
                 "value": 1
-              },
-              {
-                "color": "#890f02"
               }
             ]
           },
