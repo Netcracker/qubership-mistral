@@ -554,6 +554,30 @@ Webhook notifier returns token
 
     Wait until the execution will has SUCCESS state
 
+Authenticate with M2M_AUTH_MODE legacy
+    [Tags]  security  m2m-auth
+    Skip if auth is disalbed  ${AUTH_ENABLE}
+    Skip If    '${M2M_AUTH_MODE}' != 'legacy'    M2M_AUTH_MODE is not legacy
+    Log To Console    M2M_AUTH_MODE=legacy effective AUTH_TYPE=${AUTH_TYPE}
+
+    Get all workflows
+
+Authenticate with M2M_AUTH_MODE k8s
+    [Tags]  security  m2m-auth  k8s-sa
+    Skip if auth is disalbed  ${AUTH_ENABLE}
+    Skip If    '${M2M_AUTH_MODE}' != 'k8s'    M2M_AUTH_MODE is not k8s
+    Log To Console    M2M_AUTH_MODE=k8s effective AUTH_TYPE=${AUTH_TYPE}
+
+    Get all workflows
+
+Authenticate with M2M_AUTH_MODE hybrid
+    [Tags]  security  m2m-auth  k8s-sa
+    Skip if auth is disalbed  ${AUTH_ENABLE}
+    Skip If    '${M2M_AUTH_MODE}' != 'hybrid'    M2M_AUTH_MODE is not hybrid
+    Log To Console    M2M_AUTH_MODE=hybrid effective AUTH_TYPE=${AUTH_TYPE}
+
+    Get all workflows
+
 Mistral heartbeat
     [Tags]  basic  heartbeat
 

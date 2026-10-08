@@ -334,7 +334,8 @@ The Mistral Authentication parameters used for the configurations are specified 
 |Parameter   |Type  |Mandatory|Default value|Description                                                        |
 |------------|------|---------|-------------|-------------------------------------------------------------------|
 |mistralCommonParams.auth.enable|bool|no|'False'|This parameter specifies whether authentication is enabled.|
-|mistralCommonParams.auth.type|string|no|'mitreid'|This parameter specifies the authentication type.|
+|mistralCommonParams.auth.type|string|no|'keycloak-oidc'|This parameter specifies the authentication type. Valid values: `keycloak-oidc`, `k8s-sa`, `keystone`, `mitreid`, `hybrid` (k8s-sa with keycloak-oidc fallback).|
+|M2M_AUTH_MODE|string|no|'legacy'|Convenience shorthand that sets `auth.type` at application startup. Valid values: `legacy` (→ `keycloak-oidc`), `hybrid` (→ `hybrid`), `k8s` (→ `k8s-sa`). Takes precedence over `auth.type`. See [M2M Authentication Mode](#m2m-authentication-mode).|
 |mistralCommonParams.auth.certs|string|no|''|This parameter specifies the certificate to verify idpExternalServer.|
 |mistralCommonParams.auth.projectRules|list|no|`[{"type":"extract","field":"iss","pattern":"*/realms/{value}"}]`|This parameter specifies the rules for resolving the project ID from token claims. For more information, see [Project ID Resolution](#project-id-resolution).|
 |mistralCommonParams.defaultProjectId|string|yes|''|This parameter specifies the fallback project ID to use when authentication is not enabled or no project rule matches the token.|
@@ -433,6 +434,113 @@ mistralCommonParams:
       - type: extract
         field: "iss"
         pattern: "*/realms/{value}"
+```
+
+## Kubernetes Service Account Authentication
+
+When `mistralCommonParams.auth.type` is set to `k8s-sa`, Mistral authenticates
+inbound API requests using Kubernetes ServiceAccount JWT tokens. Token validation
+is delegated to the Kubernetes API server via the TokenReview API.
+
+### Required RBAC
+
+When `auth.type: k8s-sa` is enabled, the Helm chart creates:
+
+- **ServiceAccount** `mistral-api-sa` — used by the Mistral API pods.
+- **ClusterRole** `mistral-token-reviewer` — grants `create` on `tokenreviews.authentication.k8s.io`. Shared across all Mistral instances in the cluster; created only if it does not already exist.
+- **ClusterRoleBinding** `mistral-token-reviewer-binding-<namespace>` — binds the shared ClusterRole to the `mistral-api-sa` ServiceAccount in each installation namespace.
+
+### Example Configuration
+
+```yaml
+mistralCommonParams:
+  auth:
+    enable: true
+    type: k8s-sa
+    projectRules:
+      - type: extract
+        field: namespace
+        pattern: "{value}"
+  defaultProjectId: "default"
+```
+
+The `projectRules` example above maps the ServiceAccount's namespace directly to
+the Mistral project ID. Adjust the rules to match your project ID scheme — see
+[Project ID Resolution](#project-id-resolution) for details.
+
+> **Note:** M2M_AUTH_MODE ultimately decides the effective authentication type.See [M2M Authentication Mode](#m2m-authentication-mode).
+
+### Authorization scope
+
+With `k8s-sa`, authorization is **project-scoped only**. Mistral does not
+perform any role-based access checks (no admin/member role enforcement) for
+this auth type. Access is granted to any request carrying a valid ServiceAccount
+token, scoped to the project ID resolved from that token's claims.
+
+> **Note:** Role-based authorization is intentionally excluded because Mistral's
+> admin-gated endpoints are not used in current ServiceAccount-based deployments.
+> If role enforcement becomes necessary in the future, it can be introduced by
+> implementing a ServiceAccount-name-to-role mapping (e.g. mapping specific SA
+> names or groups to `admin`/`member` roles) in the `K8sSAAuthHandler`.
+
+### Outbound request authentication
+
+When `mistralCommonParams.auth.type` is `k8s-sa` and
+`[oauth2] security_profile = prod`, Mistral's outbound calls (webhook
+notifications and `oauth2.http` workflow actions) use the pod's own mounted
+ServiceAccount token as the Bearer token.
+
+To override the token file path:
+
+```yaml
+mistralCommonParams:
+  k8sSa:
+    tokenPath: /var/run/secrets/kubernetes.io/serviceaccount/token
+```
+
+## M2M Authentication Mode
+
+`M2M_AUTH_MODE` is a top-level Helm parameter that provides a single control for machine-to-machine authentication. When set, it sets `auth.type` at application startup, making `auth.type` the single source of truth for both inbound request validation and outbound token acquisition.
+
+| Mode | Effective `auth.type` | Inbound validation | Outbound token |
+|------|----------------------|--------------------|----------------|
+| `legacy` | `keycloak-oidc` | Keycloak OIDC JWT | Keycloak client credentials |
+| `hybrid` | `hybrid` | K8s SA, falls back to Keycloak OIDC | Mounted SA token, falls back to Keycloak client credentials |
+| `k8s` | `k8s-sa` | K8s SA only | Mounted SA token only |
+
+### `legacy`
+
+All tokens are validated against Keycloak. Equivalent to setting `auth.type: keycloak-oidc`.
+
+```yaml
+M2M_AUTH_MODE: legacy
+mistralCommonParams:
+  auth:
+    enable: true
+```
+
+### `hybrid`
+
+Mistral attempts K8s TokenReview first; if that fails it falls back to Keycloak JWT validation.
+
+```yaml
+M2M_AUTH_MODE: hybrid
+mistralCommonParams:
+  auth:
+    enable: true
+```
+
+> **Note:** `hybrid` requires both the RBAC resources for TokenReview (created automatically by the chart — see [Required RBAC](#required-rbac)) and the Keycloak OAuth2 credentials (`secrets.idpClientId`, `secrets.idpClientSecret`).
+
+### `k8s`
+
+All tokens are validated via the Kubernetes TokenReview API. Outbound calls use the pod's mounted ServiceAccount token. Equivalent to setting `auth.type: k8s-sa`.
+
+```yaml
+M2M_AUTH_MODE: k8s
+mistralCommonParams:
+  auth:
+    enable: true
 ```
 
 ## Kafka Notification Parameters

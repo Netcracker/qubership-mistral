@@ -51,6 +51,9 @@ spec:
                       type: boolean
                     cloudCoreIntegrationEnabled:
                       type: boolean
+                    m2mAuthMode:
+                      type: string
+                      nullable: true
                     imagePullPolicy:
                       type: string
                     ingress:
@@ -5905,6 +5908,9 @@ spec:
                           type: boolean
                         type:
                           type: string
+                        M2M_AUTH_MODE:
+                          type: string
+                          nullable: true
                         projectRules:
                           type: string
                           nullable: true

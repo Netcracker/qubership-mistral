@@ -99,6 +99,7 @@ def error_handler(f):
 class Mistral(object):
 
     def __init__(self, mistral_url='1', auth_enable='f', auth_type='mitreid',
+                 m2m_auth_mode=None,
                  client_register_token=None, idp_server=None,
                  tenant=None, idp_user=None, idp_password=None,
                  multitenancy_enabled='False', idp_client_id=None,
@@ -106,6 +107,7 @@ class Mistral(object):
         self._mistral_url = mistral_url
         self._auth_enable = util.strtobool(auth_enable.lower())
         self._auth_type = auth_type
+        self._m2m_auth_mode = (m2m_auth_mode or '').lower()
         self._main_tenant = tenant
         self._idp_user = idp_user
         self._idp_password = idp_password
@@ -131,6 +133,18 @@ class Mistral(object):
                                                 client_register_token,
                                                 idp_client_id=idp_client_id,
                                                 idp_client_secret=idp_client_secret)
+            elif self._auth_type == 'k8s-sa':
+                self._idp = idp.K8sSALibrary()
+            elif self._auth_type == 'hybrid':
+                try:
+                    k8s = idp.K8sSALibrary()
+                    k8s.get_token()
+                    self._idp = k8s
+                except Exception:
+                    self._idp = idp.KeycloakLibrary(idp_server,
+                                                    client_register_token,
+                                                    idp_client_id=idp_client_id,
+                                                    idp_client_secret=idp_client_secret)
 
         logger.info(f'Mistral parameters: {self.__dict__}')
 

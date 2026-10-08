@@ -5,6 +5,7 @@
 *** Variables ***
 ${OWN_URL}                 %{OWN_URL}
 ${AUTH_ENABLE}             %{AUTH_ENABLE}
+${AUTH_TYPE}               %{AUTH_TYPE}
 ${TENANT}                  system
 ${WORKFLOW_NAMESPACE}      tests
 ${KUBERNETES_NAMESPACE}    %{KUBERNETES_NAMESPACE}
@@ -13,6 +14,7 @@ ${MISTRAL_CR_NAME}         mistral-service
 ${MISTRAL_SECRET_NAME}     mistral-secret
 ${DBAAS_USER}              %{DBAAS_USER=}
 ${DBAAS_PASSWORD}          %{DBAAS_PASSWORD=}
+${M2M_AUTH_MODE}           %{M2M_AUTH_MODE=}
 
 
 *** Settings ***
@@ -21,6 +23,7 @@ Library  OperatingSystem
 Library  ../lib/Mistral.py  mistral_url=%{MISTRAL_URL}
 ...                      auth_enable=%{AUTH_ENABLE}
 ...                      auth_type=%{AUTH_TYPE}
+...                      m2m_auth_mode=%{M2M_AUTH_MODE=}
 ...                      client_register_token=%{CLIENT_REGISTRATION_TOKEN}
 ...                      idp_server=%{IDP_SERVER}
 ...                      tenant=${TENANT}
