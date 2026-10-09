@@ -98,7 +98,7 @@ RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/' > /etc/apk/reposito
     echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/community/' >> /etc/apk/repositories && \
     apk upgrade --no-cache && \
     apk add --no-cache \
-    gettext \
+    gettext-envsubst \
     procps \
     curl \
     git \
