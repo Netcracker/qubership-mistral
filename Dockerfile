@@ -11,7 +11,7 @@ RUN BRANCH=$(git rev-parse --abbrev-ref HEAD) && \
     COMMIT_DATE=$(date) && \
     echo "{ \"git\": { \"branch\": \"$BRANCH\", \"id\": \"$ID\", \"time\": \"$COMMIT_DATE\" }}" > /repo/version.json
 
-FROM python:3.10.20-alpine3.24 AS wheelhouse
+FROM python:3.10.21-alpine3.24 AS wheelhouse
 
 RUN python --version && pip --version
 
@@ -38,7 +38,7 @@ RUN python --version && pip --version && \
     pip wheel --no-cache-dir -r /tmp/requirements.txt    -w /wheels && \
     pip wheel --no-cache-dir -r /tmp/nc_requirements.txt -w /wheels
 
-FROM python:3.10.20-alpine3.24
+FROM python:3.10.21-alpine3.24
 
 LABEL "maintainer"="Vadim Zelenevskii wortellen@gmail.com"
 
@@ -96,8 +96,9 @@ RUN mkdir -p "${CONFIGS_HOME}" && \
 
 RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/' > /etc/apk/repositories && \
     echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/community/' >> /etc/apk/repositories && \
+    apk upgrade --no-cache && \
     apk add --no-cache \
-    gettext \
+    gettext-envsubst \
     procps \
     curl \
     git \

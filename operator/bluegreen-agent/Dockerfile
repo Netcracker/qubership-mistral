@@ -1,9 +1,9 @@
-FROM python:3.10.20-alpine3.24
+FROM python:3.10.21-alpine3.24
 
 WORKDIR /app
 RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/' > /etc/apk/repositories && \
     echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/community/' >> /etc/apk/repositories && \
-    apk update && apk add --no-cache \
+    apk update && apk upgrade --no-cache && apk add --no-cache \
     curl
 
 COPY requirements.txt .

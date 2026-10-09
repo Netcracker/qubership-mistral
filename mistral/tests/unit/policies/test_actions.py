@@ -89,19 +89,16 @@ class TestActionPolicy(base.APITest):
         resp = self.app.post(
             '/v2/actions',
             ADHOC_ACTION_YAML,
-            headers={'Content-Type': 'text/plain'},
-            expect_errors=True
+            headers={'Content-Type': 'text/plain'}
         )
 
         self.assertEqual(201, resp.status_int)
 
     @mock.patch.object(db_api, "create_action_definition")
     def test_action_create_public_not_allowed(self, mock_obj):
-        self.policy.change_policy_definition({
-            "actions:create": "role:FAKE or rule:admin_or_owner",
-            "actions:publicize": "role:FAKE"
-        })
-
+        # Default policy requires admin_only for publicize.
+        # The default test context has is_admin=False, so a regular user
+        # (project owner) should be denied.
         resp = self.app.post(
             '/v2/actions?scope=public',
             ADHOC_ACTION_YAML,
@@ -113,16 +110,15 @@ class TestActionPolicy(base.APITest):
 
     @mock.patch.object(db_api, "create_action_definition")
     def test_action_create_public_allowed(self, mock_obj):
-        self.policy.change_policy_definition({
-            "actions:create": "role:FAKE or rule:admin_or_owner",
-            "actions:publicize": "role:FAKE or rule:admin_or_owner"
-        })
+        # Default policy requires admin_only for publicize.
+        # An admin user should be allowed.
+        self.ctx.is_admin = True
+        self.addCleanup(setattr, self.ctx, 'is_admin', False)
 
         resp = self.app.post(
             '/v2/actions?scope=public',
             ADHOC_ACTION_YAML,
-            headers={'Content-Type': 'text/plain'},
-            expect_errors=True
+            headers={'Content-Type': 'text/plain'}
         )
 
         self.assertEqual(201, resp.status_int)
@@ -145,7 +141,7 @@ class TestActionPolicy(base.APITest):
             {"actions:delete": "role:FAKE or rule:admin_or_owner"}
         )
 
-        resp = self.app.delete('/v2/actions/123', expect_errors=True)
+        resp = self.app.delete('/v2/actions/123')
 
         self.assertEqual(204, resp.status_int)
 
@@ -184,7 +180,7 @@ class TestActionPolicy(base.APITest):
             {"actions:list": "role:FAKE or rule:admin_or_owner"}
         )
 
-        resp = self.app.get('/v2/actions', expect_errors=True)
+        resp = self.app.get('/v2/actions')
 
         self.assertEqual(200, resp.status_int)
 
@@ -212,19 +208,16 @@ class TestActionPolicy(base.APITest):
         resp = self.app.put(
             '/v2/actions',
             ADHOC_ACTION_YAML,
-            headers={'Content-Type': 'text/plain'},
-            expect_errors=True
+            headers={'Content-Type': 'text/plain'}
         )
 
         self.assertEqual(200, resp.status_int)
 
     @mock.patch.object(db_api, "update_action_definition")
     def test_action_update_public_not_allowed(self, mock_obj):
-        self.policy.change_policy_definition({
-            "actions:update": "role:FAKE or rule:admin_or_owner",
-            "actions:publicize": "role:FAKE"
-        })
-
+        # Default policy requires admin_only for publicize.
+        # The default test context has is_admin=False, so a regular user
+        # (project owner) should be denied.
         resp = self.app.put(
             '/v2/actions?scope=public',
             ADHOC_ACTION_YAML,
@@ -236,16 +229,15 @@ class TestActionPolicy(base.APITest):
 
     @mock.patch.object(db_api, "update_action_definition")
     def test_action_update_public_allowed(self, mock_obj):
-        self.policy.change_policy_definition({
-            "actions:update": "role:FAKE or rule:admin_or_owner",
-            "actions:publicize": "role:FAKE or rule:admin_or_owner"
-        })
+        # Default policy requires admin_only for publicize.
+        # An admin user should be allowed.
+        self.ctx.is_admin = True
+        self.addCleanup(setattr, self.ctx, 'is_admin', False)
 
         resp = self.app.put(
             '/v2/actions?scope=public',
             ADHOC_ACTION_YAML,
-            headers={'Content-Type': 'text/plain'},
-            expect_errors=True
+            headers={'Content-Type': 'text/plain'}
         )
 
         self.assertEqual(200, resp.status_int)

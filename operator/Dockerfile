@@ -1,4 +1,4 @@
-FROM python:3.10.20-alpine3.24 AS wheelhouse
+FROM python:3.10.21-alpine3.24 AS wheelhouse
 
 RUN python --version && pip --version
 
@@ -7,7 +7,7 @@ COPY build/requirements.txt requirements.txt
 RUN pip install --no-cache-dir --upgrade pip==25.3 wheel && \
     pip wheel --no-cache-dir -r requirements.txt    -w /wheels
 
-FROM python:3.10.20-alpine3.24
+FROM python:3.10.21-alpine3.24
 
 ENV WORKDIR=/opt/operator/ \
     USER_UID=1001 \
@@ -23,7 +23,7 @@ RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/' > /etc/apk/reposito
 #     apk add --no-cache \
 #       expat=2.4.3-r0
 
-RUN apk update
+RUN apk update && apk upgrade --no-cache
 
 COPY build/requirements.txt requirements.txt
 COPY build/user_setup /usr/local/bin
