@@ -189,7 +189,13 @@ MISTRAL_TLS_CA_PATH = '/opt/mistral/mount_configs/tls/ca.crt'
 
 MISTRAL_LITE_DEPLOYMENT = MISTRAL_LABEL = MISTRAL_SERVICE = "mistral"
 SERVICE_ACCOUNT = MISTRAL_OPERATOR = "mistral-operator"
-API_SERVICE_ACCOUNT = "mistral-api-sa"
+K8S_SA_AUDIENCE = "netcracker"
+K8S_SA_AUDIENCE_TOKENS_DIR = "/var/run/secrets/tokens"
+K8S_SA_AUDIENCE_TOKEN_VOLUME = "k8s-sa-audience-token"
+K8S_SA_AUDIENCE_TOKEN_EXPIRATION_SECONDS = 3600
+# Audience of the token the operator sends to the DBaaS aggregator. Must match
+# the aggregator's KUBERNETES_M2M_AUDIENCE (default "dbaas").
+DBAAS_AUDIENCE = "dbaas"
 SELECTOR = "mistral-api"
 MISTRAL_CUSTOM_CONFIG_VOLUME = "mistral-custom-config-volume"
 MISTRAL_TLS_CONFIG_VOLUME = "mistral-tls-config-volume"

@@ -384,6 +384,15 @@
                         "cloudCoreUsername": {
                             "type": "string"
                         },
+                        "k8sSa": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "audience": {
+                                    "type": "string"
+                                }
+                            }
+                        },
                         "projectRules": {
                             "type": "array",
                             "items": {

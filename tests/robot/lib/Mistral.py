@@ -656,9 +656,10 @@ class Mistral(object):
         res = self._security_request(
             'GET',
             self._mistral_url + '/executions?' + query
-        ).json()
+        )
+        assert_response(res)
 
-        return res['executions']
+        return res.json()['executions']
 
     @error_handler
     def delete_stuck_executions(self):
@@ -976,6 +977,25 @@ class Mistral(object):
         assert_response(res)
 
         return res.json()['actions']
+
+    def get_workflows_http_status_with_token(self, token):
+        """Status of GET /workflows with an explicit bearer token."""
+        res = requests.get(self._mistral_url + '/workflows',
+                           headers={'Authorization': 'Bearer ' + token},
+                           timeout=30)
+
+        return res.status_code
+
+    def get_workflows_http_status_with_default_sa_token(self):
+        """Status of GET /workflows with the pod's default SA token.
+
+        Its audience is the cluster API server, not the one Mistral requires,
+        so it must be rejected in every M2M_AUTH_MODE.
+        """
+        with open(idp.K8sSALibrary.DEFAULT_TOKEN_PATH, 'r') as f:
+            token = f.read().strip()
+
+        return self.get_workflows_http_status_with_token(token)
 
     def _security_request(self, *args, **kwargs):
         headers = kwargs.get('headers')

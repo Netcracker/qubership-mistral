@@ -207,7 +207,8 @@ Authentication details are as follows:
 |SECURITY_PROFILE|dev|Security in actions: `dev` - disable, `prod` - enable|
 |AUTH_ENABLE|False|Enable security in Mistral services|
 |AUTH_TYPE|mitreid|`keystone`, `mitreid`, `keycloak-oidc`, `k8s-sa`, or `hybrid` (k8s-sa with keycloak-oidc fallback)|
-|M2M_AUTH_MODE| |Convenience shorthand that sets `AUTH_TYPE` at startup. Valid values: `legacy` (keycloak-oidc), `k8s` (k8s-sa), `hybrid`. Takes precedence over `AUTH_TYPE`.|
+|K8S_SA_AUDIENCE|netcracker|Required audience of inbound ServiceAccount tokens and audience of the projected token used for outbound requests (`k8s-sa`, `hybrid`)|
+|M2M_AUTH_MODE| |M2M authentication mode which in turn resolves `AUTH_TYPE` value. Valid values: `legacy` (keycloak-oidc), `k8s` (k8s-sa), `hybrid`. Takes precedence over `auth.type`. The application itself reads only `AUTH_TYPE`.|
 |IDP_SERVER| |Internal URL can be used to obtain a jwt token|
 |IDP_EXTERNAL_SERVER| |External URL must be used to generate a client and secret|
 |IDP_REGISTRATION_TOKEN| |Registration token|

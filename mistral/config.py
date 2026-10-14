@@ -57,19 +57,8 @@ auth_type_opt = cfg.StrOpt(
     default='keystone',
     help=_('Authentication type (valid options: keystone, keycloak-oidc, '
            'k8s-sa, mitreid, hybrid). The hybrid type tries k8s-sa first '
-           'and falls back to keycloak-oidc on failure. This value is '
-           'automatically overridden at startup when m2m_auth_mode is set.')
-)
-
-m2m_auth_mode_opt = cfg.StrOpt(
-    'm2m_auth_mode',
-    default='legacy',
-    help=_(
-        'In operator-managed deployments '
-        'this is resolved into auth_type by the operator before the '
-        'application starts, so the application never reads it. '
-        'Valid values: legacy (keycloak-oidc), hybrid, k8s (k8s-sa).'
-    )
+           'and falls back to keycloak-oidc on failure. In operator-managed '
+           'deployments it is derived from M2M_AUTH_MODE by the operator.')
 )
 
 auth_opts = [
@@ -794,10 +783,12 @@ keycloak_oidc_opts = [
 
 k8s_sa_opts = [
     cfg.StrOpt(
-        'token_path',
-        default='/var/run/secrets/kubernetes.io/serviceaccount/token',
-        help=_('Path to the Kubernetes service account token file used for '
-               'outbound authenticated requests.')
+        'audience',
+        default='netcracker',
+        help=_('Required audience ("aud" claim) of inbound ServiceAccount '
+               'tokens. Outbound requests are authenticated with the '
+               'projected ServiceAccount token of the same audience, read '
+               'from /var/run/secrets/tokens/<audience>/token.')
     ),
 ]
 
@@ -1051,7 +1042,6 @@ RABBITMQ_GROUP = 'rabbitmq'
 
 CONF.register_opt(wf_trace_log_name_opt)
 CONF.register_opt(auth_type_opt)
-CONF.register_opt(m2m_auth_mode_opt)
 CONF.register_opt(default_project_id_opt)
 CONF.register_opt(scheduler_type_opt)
 CONF.register_opt(js_impl_opt)
@@ -1101,7 +1091,6 @@ CLI_OPTS = [
 default_group_opts = CLI_OPTS + [
     wf_trace_log_name_opt,
     auth_type_opt,
-    m2m_auth_mode_opt,
     default_project_id_opt,
     scheduler_type_opt,
     js_impl_opt,

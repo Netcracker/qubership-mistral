@@ -12,10 +12,15 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import os
+import tempfile
+import time
 from unittest import mock
 
+import jwt
 from oslo_config import cfg
 
+from mistral import auth
 import mistral.services.secure_request as sr
 from mistral.tests.unit import base
 
@@ -114,3 +119,52 @@ class RefreshDispatchTest(base.BaseTest):
     def test_unsupported_auth_type_raises(self):
         CONF.set_override('auth_type', 'unknown-type')
         self.assertRaises(ValueError, sr.set_auth_token, {})
+
+
+class K8sSaOutboundTokenTest(base.BaseTest):
+    """Outbound requests use the projected token of the [k8s_sa] audience."""
+
+    def setUp(self):
+        super().setUp()
+
+        self.tokens_dir = tempfile.mkdtemp()
+        patcher = mock.patch.object(
+            auth, 'K8S_SA_AUDIENCE_TOKENS_DIR', self.tokens_dir
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _write_token(self, audience, token):
+        os.makedirs(os.path.join(self.tokens_dir, audience))
+
+        with open(os.path.join(self.tokens_dir, audience, 'token'), 'w') as f:
+            f.write(token + '\n')
+
+    def test_uses_netcracker_audience_token(self):
+        exp = int(time.time()) + 600
+        token = jwt.encode(
+            {'aud': ['netcracker'], 'exp': exp}, 'k', algorithm='HS256'
+        )
+        self._write_token('netcracker', token)
+
+        # The default SA token must not be used for outbound requests.
+        with mock.patch.object(auth, 'K8S_SA_TOKEN_PATH', '/does/not/exist'):
+            result = sr._auth_using_k8s_sa()
+
+        self.assertEqual(token, result['access_token'])
+        self.assertEqual('Bearer', result['token_type'])
+        self.assertTrue(0 < result['expires_in'] <= 600)
+
+    def test_audience_option_selects_the_token(self):
+        self._write_token('netcracker', 'default-aud-token')
+        self._write_token('other', 'other-aud-token')
+        CONF.set_override('audience', 'other', group='k8s_sa')
+        self.addCleanup(CONF.clear_override, 'audience', group='k8s_sa')
+
+        self.assertEqual(
+            'other-aud-token', sr._auth_using_k8s_sa()['access_token']
+        )
+
+    def test_missing_audience_token_raises(self):
+        # Lets hybrid mode fall back to keycloak-oidc.
+        self.assertRaises(OSError, sr._auth_using_k8s_sa)

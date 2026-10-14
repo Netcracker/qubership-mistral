@@ -198,6 +198,9 @@ mistralCommonParams:
       - type: extract
         field: "iss"
         pattern: "*/realms/{value}"
+    k8sSa:
+      # allowed audience for k8s SA tokens
+      audience: "netcracker"
   dbaas:
     agentUrl: "http://dbaas-agent:8080"
     aggregatorUrl: "http://dbaas-aggregator.dbaas:8080"

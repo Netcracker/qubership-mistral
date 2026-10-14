@@ -65,6 +65,15 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 100Mi
+        {{- if eq (include "mistral.dbaasK8sTokenEnabled" .) "true" }}
+        - name: dbaas-audience-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: dbaas
+                  expirationSeconds: 3600
+                  path: token
+        {{- end }}
         {{- if eq (include "bluegreenAgent.enabled" .) "true" }}
         - name: mistral-secrets
           secret:
@@ -156,6 +165,11 @@ spec:
             {{- end }}
             - name: tmp
               mountPath: /tmp
+            {{- if eq (include "mistral.dbaasK8sTokenEnabled" .) "true" }}
+            - name: dbaas-audience-token
+              mountPath: /var/run/secrets/tokens/dbaas
+              readOnly: true
+            {{- end }}
         {{- if (eq (include "mistral.enableDisasterRecovery" .) "true") }}
         - name: mistral-disaster-recovery
           image: {{ template "disasterRecovery.image" . }}

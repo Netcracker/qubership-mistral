@@ -27,6 +27,11 @@ LOG = logging.getLogger(__name__)
 _IMPL_AUTH_HANDLER = None
 
 TOKEN_HEADER_KEY = 'Authorization'
+
+K8S_SA_TOKEN_PATH = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+K8S_SA_CA_PATH = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+K8S_SA_AUDIENCE_TOKENS_DIR = '/var/run/secrets/tokens'
+
 _AUTH_HEADER_PATTERN = re.compile(r'^\w+\s(.*)$')
 
 

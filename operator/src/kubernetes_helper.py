@@ -23,7 +23,8 @@ from kubernetes.client import V1ObjectMeta, V1EnvVar, V1Container, V1PodSpec, \
     V1Service, V1ServiceSpec, V1ServicePort, V1ConfigMapKeySelector, \
     V1ResourceFieldSelector, V1LabelSelector, V1Job, V1JobSpec, \
     V1DeleteOptions, V1ComponentCondition, V1ComponentStatus, V1SecurityContext, \
-    V1Capabilities, V1SeccompProfile, V1SecretVolumeSource, V1EmptyDirVolumeSource
+    V1Capabilities, V1SeccompProfile, V1SecretVolumeSource, V1EmptyDirVolumeSource, \
+    V1ProjectedVolumeSource, V1VolumeProjection, V1ServiceAccountTokenProjection
 
 import mistral_constants as MC
 from rabbitmq_helper import RabbitMQHelper
@@ -108,6 +109,35 @@ class KubernetesHelper:
     @staticmethod
     def _get_cloudcore_volume_mount():
         return V1VolumeMount(name='mistral-client-credentials', mount_path='/var/run/secrets/mistral-client-credentials', read_only=True)
+
+    def _get_k8s_sa_audience_token_volume(self):
+        return V1Volume(
+            name=MC.K8S_SA_AUDIENCE_TOKEN_VOLUME,
+            projected=V1ProjectedVolumeSource(sources=[
+                V1VolumeProjection(
+                    service_account_token=V1ServiceAccountTokenProjection(
+                        audience=self.get_k8s_sa_audience(),
+                        expiration_seconds=MC.K8S_SA_AUDIENCE_TOKEN_EXPIRATION_SECONDS,
+                        path='token'))]))
+
+    def _get_k8s_sa_audience_token_volume_mount(self):
+        # The application reads <audience_tokens_dir>/<audience>/token
+        return V1VolumeMount(
+            name=MC.K8S_SA_AUDIENCE_TOKEN_VOLUME,
+            mount_path=f'{MC.K8S_SA_AUDIENCE_TOKENS_DIR}/{self.get_k8s_sa_audience()}',
+            read_only=True)
+
+    @staticmethod
+    def _get_k8s_sa_envs():
+        """Env vars feeding the [k8s_sa] section of mistral.conf."""
+        return [
+            V1EnvVar(
+                name='K8S_SA_AUDIENCE',
+                value_from=V1EnvVarSource(
+                    config_map_key_ref=V1ConfigMapKeySelector(
+                        key='k8s-sa-audience',
+                        name=MC.COMMON_CONFIGMAP)))
+        ]
 
     @staticmethod
     def _get_config_redirect_env():
@@ -760,12 +790,7 @@ class KubernetesHelper:
                     config_map_key_ref=V1ConfigMapKeySelector(
                         key='auth-type',
                         name=MC.COMMON_CONFIGMAP))),
-            V1EnvVar(
-                name='M2M_AUTH_MODE',
-                value_from=V1EnvVarSource(
-                    config_map_key_ref=V1ConfigMapKeySelector(
-                        key='m2m-auth-mode',
-                        name=MC.COMMON_CONFIGMAP))),
+            *self._get_k8s_sa_envs(),
             V1EnvVar(
                 name='AUTH_PROJECT_RULES',
                 value_from=V1EnvVarSource(
@@ -791,7 +816,7 @@ class KubernetesHelper:
         if self.tls_enabled():
             container_envs.extend(self.get_tls_envs())
 
-        if self.is_cloud_core_integration_enabled():
+        if self.needs_cloudcore_secret():
             container_envs.append(V1EnvVar(name='IDP_CREDS_SOURCE', value='cloudcore'))
         elif self.is_auth_enabled() and self.is_idp_user_precreated():
             container_envs.append(V1EnvVar(name='IDP_CREDS_SOURCE', value='precreated'))
@@ -831,10 +856,12 @@ class KubernetesHelper:
             )
         mounts.append(self._get_tmp_volume_mount())
         mounts.append(self._get_mistralsecret_volume_mount())
-        if self.is_cloud_core_integration_enabled():
+        if self.needs_cloudcore_secret():
             mounts.append(self._get_cloudcore_volume_mount())
         elif self.is_auth_enabled() and self.is_idp_user_precreated():
             mounts.append(self._get_idp_precreateduser_volume_mount())
+        if self.is_k8s_sa_auth_enabled():
+            mounts.append(self._get_k8s_sa_audience_token_volume_mount())
 
         pod_template_spec = V1PodTemplateSpec(
             metadata=V1ObjectMeta(
@@ -889,10 +916,6 @@ class KubernetesHelper:
                     key=MC.CUSTOM_CONFIG_API, path=MC.ADDITIONAL_CONFIGS_FILE_PATH
                 )
             )
-            if self.is_auth_enabled() and \
-                    self.get_effective_auth_type() in ('k8s-sa', 'hybrid'):
-                pod_template_spec.spec.service_account_name = \
-                    MC.API_SERVICE_ACCOUNT
 
         if server_name.lower() == 'executor':
             executor_params = self._spec['mistralExecutor']
@@ -1018,10 +1041,12 @@ class KubernetesHelper:
             self._get_tmp_volume(),
             self._get_mistralsecret_volume(),
         ]
-        if self.is_cloud_core_integration_enabled():
+        if self.needs_cloudcore_secret():
             pod_template_spec.spec.volumes.append(self._get_cloudcore_secret_volume())
         elif self.is_auth_enabled() and self.is_idp_user_precreated():
             pod_template_spec.spec.volumes.append(self._get_idp_precreateduser_secret_volume())
+        if self.is_k8s_sa_auth_enabled():
+            pod_template_spec.spec.volumes.append(self._get_k8s_sa_audience_token_volume())
 
         spec = client.V1DeploymentSpec(
             replicas=mistral_replicas,
@@ -1224,12 +1249,7 @@ class KubernetesHelper:
                     config_map_key_ref=V1ConfigMapKeySelector(
                         key='auth-type',
                         name=MC.COMMON_CONFIGMAP))),
-            V1EnvVar(
-                name='M2M_AUTH_MODE',
-                value_from=V1EnvVarSource(
-                    config_map_key_ref=V1ConfigMapKeySelector(
-                        key='m2m-auth-mode',
-                        name=MC.COMMON_CONFIGMAP))),
+            *self._get_k8s_sa_envs(),
             V1EnvVar(
                 name='AUTH_PROJECT_RULES',
                 value_from=V1EnvVarSource(
@@ -1279,6 +1299,14 @@ class KubernetesHelper:
             name=MC.MISTRAL_CUSTOM_CONFIG_VOLUME),
             self._get_tmp_volume(),
             self._get_mistralsecret_volume()]
+        volume_mounts = [V1VolumeMount(
+            mount_path='/opt/mistral/mount_configs/custom',
+            name=MC.MISTRAL_CUSTOM_CONFIG_VOLUME
+        ), self._get_tmp_volume_mount(), self._get_mistralsecret_volume_mount()]
+
+        if self.is_k8s_sa_auth_enabled():
+            volumes.append(self._get_k8s_sa_audience_token_volume())
+            volume_mounts.append(self._get_k8s_sa_audience_token_volume_mount())
 
         pod_template_spec = V1PodTemplateSpec(
             metadata=V1ObjectMeta(
@@ -1299,10 +1327,7 @@ class KubernetesHelper:
                 args=['./upgrade_db_and_start.sh'],
                 resources=container_resources,
                 env=container_envs,
-                volume_mounts=[V1VolumeMount(
-                    mount_path='/opt/mistral/mount_configs/custom',
-                    name=MC.MISTRAL_CUSTOM_CONFIG_VOLUME
-                ), self._get_tmp_volume_mount(), self._get_mistralsecret_volume_mount()],
+                volume_mounts=volume_mounts,
                 ports=[V1ContainerPort(
                     container_port=8989,
                     protocol='TCP')],
@@ -1676,6 +1701,11 @@ class KubernetesHelper:
     def is_auth_enabled(self):
         return self._spec['mistralCommonParams']['auth']['enable']
 
+    def is_k8s_sa_auth_enabled(self):
+        """True if ServiceAccount token auth is used (k8s-sa or hybrid)."""
+        return bool(self.is_auth_enabled()) and \
+            self.get_effective_auth_type() in ('k8s-sa', 'hybrid')
+
     def get_auth_type(self):
         return str(
             self._spec['mistralCommonParams']['auth'].get('type', '')
@@ -1686,11 +1716,17 @@ class KubernetesHelper:
             self._spec['mistral'].get('m2mAuthMode', '')
         ).lower()
 
+    def get_k8s_sa_audience(self):
+        return str(
+            self._spec['mistralCommonParams']['auth'].get('k8sSa', {})
+            .get('audience') or MC.K8S_SA_AUDIENCE
+        )
+
     def get_effective_auth_type(self):
         """Return the resolved auth type, applying m2mAuthMode override if set.
 
-        Mirrors _apply_m2m_auth_mode_override() in mistral/cmd/launch.py so
-        the operator and the application agree on the effective auth type.
+        The operator is the only place where M2M_AUTH_MODE is resolved; the
+        application only receives the result as ``auth_type``.
         """
         _M2M_MODE_TO_AUTH_TYPE = {
             'legacy': 'keycloak-oidc',
@@ -1704,6 +1740,14 @@ class KubernetesHelper:
 
     def is_cloud_core_integration_enabled(self):
         return self._spec['mistral']['cloudCoreIntegrationEnabled']
+
+    def needs_cloudcore_secret(self):
+        """ generate_idp_params() skips IDP setup (and therefore does not create
+        the secret) for pure k8s-sa auth, so the secret must not be mounted
+        or referenced in that mode.
+        """
+        return bool(self.is_cloud_core_integration_enabled()) and \
+            self.get_effective_auth_type() != 'k8s-sa'
 
     def get_cloudcore_username(self):
         auth_params = self._spec['mistralCommonParams']['auth']
@@ -1827,6 +1871,7 @@ class KubernetesHelper:
             'auth-enable': str(configmap['auth']['enable']),
             'auth-type': self.get_effective_auth_type(),
             'm2m-auth-mode': str(self._spec['mistral'].get('m2mAuthMode', '')),
+            'k8s-sa-audience': self.get_k8s_sa_audience(),
             'auth-project-rules': str(configmap['auth'].get('projectRules', '')),
             'default-project-id': str(configmap.get('defaultProjectId', '')),
             'dbaas-agent-url': str(configmap['dbaas']['agentUrl']),
@@ -2265,6 +2310,7 @@ class KubernetesHelper:
             dbaas_user=dbaas_user,
             dbaas_password=dbaas_password,
             namespace=self._workspace,
+            m2m_auth_mode=self.get_m2m_auth_mode(),
         )
 
 
@@ -2596,6 +2642,7 @@ class KubernetesHelper:
                     )
                 )
             ),
+            *self._get_k8s_sa_envs(),
             V1EnvVar(
                 name='M2M_AUTH_MODE',
                 value_from=V1EnvVarSource(
@@ -2704,7 +2751,7 @@ class KubernetesHelper:
                 ]
             )
 
-        if self.is_cloud_core_integration_enabled():
+        if self.needs_cloudcore_secret():
             container_envs.append(V1EnvVar(name='IDP_CREDS_SOURCE', value='cloudcore'))
         elif self.is_auth_enabled() and self.is_idp_user_precreated():
             container_envs.append(V1EnvVar(name='IDP_CREDS_SOURCE', value='precreated'))
@@ -2730,12 +2777,15 @@ class KubernetesHelper:
             self._get_mistralsecret_volume_mount(),
             V1VolumeMount(name='robot-output', mount_path='/opt/robot/output')
         ]
-        if self.is_cloud_core_integration_enabled():
+        if self.needs_cloudcore_secret():
             volumes.append(self._get_cloudcore_secret_volume())
             volume_mounts.append(self._get_cloudcore_volume_mount())
         elif self.is_auth_enabled() and self.is_idp_user_precreated():
             volumes.append(self._get_idp_precreateduser_secret_volume())
             volume_mounts.append(self._get_idp_precreateduser_volume_mount())
+        if self.is_k8s_sa_auth_enabled():
+            volumes.append(self._get_k8s_sa_audience_token_volume())
+            volume_mounts.append(self._get_k8s_sa_audience_token_volume_mount())
         if self.is_secret_present(MC.MISTRAL_TLS_SECRET):
             volumes.append(
                 V1Volume(

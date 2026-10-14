@@ -16,6 +16,7 @@
 # -*- coding: utf-8 -*-
 
 import abc
+import os
 import pprint
 import re
 import base64
@@ -290,6 +291,12 @@ class K8sSALibrary(IdpBase):
     """Gets a token from the Kubernetes ServiceAccount token file.
     """
 
+    # Mistral accepts only tokens of its configured audience ("netcracker" by
+    # default). The pod's default ServiceAccount token has another audience, so
+    # it is deliberately NOT used as a fallback: a missing projected token must
+    # fail here (and let hybrid mode fall back to Keycloak), not as a 401.
+    AUDIENCE_TOKEN_PATH = '/var/run/secrets/tokens/%s/token' % os.environ.get(
+        'K8S_SA_AUDIENCE', 'netcracker')
     DEFAULT_TOKEN_PATH = '/var/run/secrets/kubernetes.io/serviceaccount/token'
 
     def __init__(self, idp_server='', client_register_token='',
@@ -302,7 +309,7 @@ class K8sSALibrary(IdpBase):
             idp_client_secret=idp_client_secret,
             multitenancy_enabled=False,
         )
-        self._token_path = token_path or self.DEFAULT_TOKEN_PATH
+        self._token_path = token_path or self.AUDIENCE_TOKEN_PATH
 
     def get_token(self):
         with open(self._token_path, 'r') as f:

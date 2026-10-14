@@ -14,11 +14,14 @@
 
 import base64
 import json
+import os
 import time
 
 from oslo_config import cfg
 from oslo_log import log
 import requests
+
+from mistral import auth
 
 """
 Encapsulates a raw authentication token from IDP.
@@ -188,8 +191,18 @@ def _auth_using_keycloak():
     return resp.json()
 
 
+def _get_k8s_sa_audience_token_path():
+    return os.path.join(
+        auth.K8S_SA_AUDIENCE_TOKENS_DIR, cfg.CONF.k8s_sa.audience, 'token'
+    )
+
+
 def _auth_using_k8s_sa():
-    token_path = cfg.CONF.k8s_sa.token_path
+    """Uses the projected ServiceAccount token of the [k8s_sa] audience.
+
+    This is the same audience that inbound requests are required to have.
+    """
+    token_path = _get_k8s_sa_audience_token_path()
     with open(token_path, 'r') as f:
         token = f.read().strip()
 

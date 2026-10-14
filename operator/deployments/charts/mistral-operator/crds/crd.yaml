@@ -305,6 +305,13 @@ spec:
                         projectRules:
                           type: string
                           nullable: true
+                        k8sSa:
+                          type: object
+                          nullable: true
+                          properties:
+                            audience:
+                              type: string
+                              nullable: true
                       type: object
                     defaultProjectId:
                       type: string
@@ -5886,9 +5893,6 @@ spec:
                           type: boolean
                         type:
                           type: string
-                        M2M_AUTH_MODE:
-                          type: string
-                          nullable: true
                         projectRules:
                           type: string
                           nullable: true

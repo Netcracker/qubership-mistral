@@ -459,12 +459,14 @@ Service Account for Site Manager depending on smSecureAuth
 
 
 {{/*
-Whether k8s-sa auth is enabled (auth.enable=true AND effective auth type is k8s-sa or hybrid).
+Whether the operator needs a ServiceAccount token with the "dbaas" audience to call the
+DBaaS aggregator (DBaaS integration enabled AND M2M_AUTH_MODE is hybrid or k8s).
 */}}
-{{- define "mistral.k8sSaAuthEnabled" -}}
-{{- $auth := toString (default false .Values.mistralCommonParams.auth.enable) | lower -}}
-{{- $authType := include "mistral.effectiveAuthType" . -}}
-{{- if and (eq $auth "true") (or (eq $authType "k8s-sa") (eq $authType "hybrid")) -}}true{{- end -}}
+{{- define "mistral.dbaasK8sTokenEnabled" -}}
+{{- $m2mMode := default "" .Values.M2M_AUTH_MODE | lower -}}
+{{- $dbaasParams := default dict .Values.mistralCommonParams.dbaas -}}
+{{- $integration := toString (default false $dbaasParams.integrationEnabled) | lower -}}
+{{- if and (eq $integration "true") (or (eq $m2mMode "k8s") (eq $m2mMode "hybrid")) -}}true{{- end -}}
 {{- end -}}
 
 {{/*
