@@ -334,7 +334,9 @@ The Mistral Authentication parameters used for the configurations are specified 
 |Parameter   |Type  |Mandatory|Default value|Description                                                        |
 |------------|------|---------|-------------|-------------------------------------------------------------------|
 |mistralCommonParams.auth.enable|bool|no|'False'|This parameter specifies whether authentication is enabled.|
-|mistralCommonParams.auth.type|string|no|'mitreid'|This parameter specifies the authentication type.|
+|mistralCommonParams.auth.type|string|no|'keycloak-oidc'|This parameter specifies the authentication type. Valid values: `keycloak-oidc`, `k8s-sa`, `keystone`, `mitreid`, `hybrid` (k8s-sa with keycloak-oidc fallback).|
+|M2M_AUTH_MODE|string|no|'legacy'|M2M authentication mode, referring it the operator resolves into the effective `auth.type` before the Mistral services start. Valid values: `legacy` (→ `keycloak-oidc`), `hybrid` (→ `hybrid`), `k8s` (→ `k8s-sa`). Takes precedence over `auth.type`. See [M2M Authentication Mode](#m2m-authentication-mode).|
+|mistralCommonParams.auth.k8sSa.audience|string|no|'netcracker'|Audience (`aud`) required in inbound ServiceAccount tokens, and audience of the projected token used for outbound requests (mounted at `/var/run/secrets/tokens/<audience>/token`). Used when the effective auth type is `k8s-sa` or `hybrid`.|
 |mistralCommonParams.auth.certs|string|no|''|This parameter specifies the certificate to verify idpExternalServer.|
 |mistralCommonParams.auth.projectRules|list|no|`[{"type":"extract","field":"iss","pattern":"*/realms/{value}"}]`|This parameter specifies the rules for resolving the project ID from token claims. For more information, see [Project ID Resolution](#project-id-resolution).|
 |mistralCommonParams.defaultProjectId|string|yes|''|This parameter specifies the fallback project ID to use when authentication is not enabled or no project rule matches the token.|
@@ -435,6 +437,123 @@ mistralCommonParams:
         pattern: "*/realms/{value}"
 ```
 
+## Kubernetes Service Account Authentication
+
+When `mistralCommonParams.auth.type` is set to `k8s-sa`, Mistral authenticates
+inbound API requests using Kubernetes ServiceAccount JWT tokens. Tokens are
+validated locally: Mistral discovers the cluster's OIDC issuer
+(`<issuer>/.well-known/openid-configuration`), downloads its public signing keys
+(JWKS) and verifies the token signature, `exp`, `iss`, `aud` and `iat`.
+
+- Only tokens whose `aud` claim contains **`netcracker`** are accepted by default.
+  Set `mistralCommonParams.auth.k8sSa.audience` to use another audience.
+- The trusted **issuer** is taken from the pod's default ServiceAccount token.
+- Keys are cached and refreshed every 24 hours, and when a token signed with an
+  unknown key id arrives (at most once per 5 minutes). Discovery / JWKS requests are
+  retried up to 5 times with exponential backoff on network errors and HTTP 5xx.
+- On **GKE** (detected automatically through the metadata server) the discovery / JWKS
+  requests are sent anonymously, because the issuer endpoint requires it.
+- A token stays valid until its `exp`.
+
+### Projected token volume
+
+When `auth.type` is `k8s-sa` or `hybrid`, the operator adds a projected volume with
+a ServiceAccount token of the configured audience (`netcracker` by default; expiration 3600 seconds, rotated by
+the kubelet) to all Mistral pods (API, engine, executor, notifier, monitoring). The
+file is mounted at `/var/run/secrets/tokens/<audience>/token`, for example
+`/var/run/secrets/tokens/netcracker/token`.
+
+### Example Configuration
+
+```yaml
+mistralCommonParams:
+  auth:
+    enable: true
+    type: k8s-sa
+    projectRules:
+      - type: extract
+        field: namespace
+        pattern: "{value}"
+  defaultProjectId: "default"
+```
+
+The `projectRules` example above maps the ServiceAccount's namespace directly to
+the Mistral project ID. Adjust the rules to match your project ID scheme — see
+[Project ID Resolution](#project-id-resolution) for details.
+
+> **Note:** M2M_AUTH_MODE ultimately decides the effective authentication type.See [M2M Authentication Mode](#m2m-authentication-mode).
+
+### Authorization scope
+
+With `k8s-sa`, authorization is **project-scoped only**. Mistral does not
+perform any role-based access checks (no admin/member role enforcement) for
+this auth type. Access is granted to any request carrying a valid ServiceAccount
+token, scoped to the project ID resolved from that token's claims.
+
+> **Note:** Role-based authorization is intentionally excluded because Mistral's
+> admin-gated endpoints are not used in current ServiceAccount-based deployments.
+> If role enforcement becomes necessary in the future, it can be introduced by
+> implementing a ServiceAccount-name-to-role mapping (e.g. mapping specific SA
+> names or groups to `admin`/`member` roles) in the `K8sSAAuthHandler`.
+
+### Outbound request authentication
+
+When the effective auth type is `k8s-sa` (`M2M_AUTH_MODE: k8s`) and
+`[oauth2] security_profile = prod`, Mistral's outbound calls (webhook
+notifications and `oauth2.http` workflow actions) use the projected ServiceAccount
+token with the **same audience as inbound validation** (`netcracker` by default) as
+the Bearer token. It is read from `/var/run/secrets/tokens/<audience>/token`
+(`/var/run/secrets/tokens/netcracker/token` by default),
+which is where the operator mounts it (see [Projected token volume](#projected-token-volume)).
+
+In `hybrid` mode, if this token file is not available, Mistral falls back to
+`keycloak-oidc` for outbound requests.
+
+## M2M Authentication Mode
+
+`M2M_AUTH_MODE` is a top-level Helm parameter that provides a single control for machine-to-machine authentication. When set, the operator resolves it into the effective `auth.type` (written to the common ConfigMap), which is the only value the Mistral services read for both inbound request validation and outbound token acquisition.
+
+| Mode | Effective `auth.type` | Inbound validation | Outbound token |
+|------|----------------------|--------------------|----------------|
+| `legacy` | `keycloak-oidc` | Keycloak OIDC JWT | Keycloak client credentials |
+| `hybrid` | `hybrid` | K8s SA, falls back to Keycloak OIDC | Projected `netcracker` SA token, falls back to Keycloak client credentials |
+| `k8s` | `k8s-sa` | K8s SA only | Projected `netcracker` SA token only |
+
+### `legacy`
+
+All tokens are validated against Keycloak. Equivalent to setting `auth.type: keycloak-oidc`.
+
+```yaml
+M2M_AUTH_MODE: legacy
+mistralCommonParams:
+  auth:
+    enable: true
+```
+
+### `hybrid`
+
+Mistral attempts K8s ServiceAccount (JWKS) validation first; if that fails it falls back to Keycloak JWT validation.
+
+```yaml
+M2M_AUTH_MODE: hybrid
+mistralCommonParams:
+  auth:
+    enable: true
+```
+
+> **Note:** `hybrid` requires access to the cluster's OIDC discovery / JWKS endpoints (granted to all authenticated ServiceAccounts by the built-in `system:service-account-issuer-discovery` ClusterRole) and the Keycloak OAuth2 credentials (`secrets.idpClientId`, `secrets.idpClientSecret`).
+
+### `k8s`
+
+All tokens are validated against the cluster's JWKS. Outbound calls use the projected `netcracker` ServiceAccount token (see [Projected token volume](#projected-token-volume)). Equivalent to setting `auth.type: k8s-sa`.
+
+```yaml
+M2M_AUTH_MODE: k8s
+mistralCommonParams:
+  auth:
+    enable: true
+```
+
 ## Kafka Notification Parameters
 
 The Kafka Notification parameters used for the configurations are specified in the following table.
@@ -460,8 +579,27 @@ The DBaaS integration parameters used for the configurations are specified in th
 |---|---|---|---|---|
 |mistralCommonParams.dbaas.integrationEnabled|bool|no|`False`|Enables DBaaS integration. When `True`, the operator synchronizes PostgreSQL connection properties from the DBaaS.|
 |mistralCommonParams.dbaas.aggregatorUrl|string|no|`http://dbaas-aggregator.dbaas:8080`|URL of the DBaaS aggregator service.|
-|secrets.dbaasUser|string|no|`cluster-dba`|Username used by the operator to authenticate against the DBaaS API.|
+|secrets.dbaasUser|string|no|`cluster-dba`|Username used by the operator to authenticate against the DBaaS API (basic auth). Used in `legacy` mode and as the fallback in `hybrid` mode.|
 |secrets.dbaasPassword|string|no|`''`|Password for `dbaasUser`.|
+
+### Authentication to DBaaS
+
+How the operator authenticates to the DBaaS aggregator follows `M2M_AUTH_MODE`:
+
+| Mode | Authentication |
+|------|----------------|
+| `legacy` | Basic auth with `secrets.dbaasUser` / `secrets.dbaasPassword`. |
+| `hybrid` | ServiceAccount token with audience `dbaas` first; basic auth if the token is not available or the aggregator answers `401` / `403`. |
+| `k8s` | ServiceAccount token with audience `dbaas` only. |
+
+When `mistralCommonParams.dbaas.integrationEnabled` is `True` and `M2M_AUTH_MODE` is `hybrid` or `k8s`, the Helm chart mounts a projected ServiceAccount token with audience `dbaas` into the operator pod at `/var/run/secrets/tokens/dbaas/token`. The token is read on every request, because the kubelet rotates it.
+
+The aggregator must be configured for it as well:
+
+- Its own `M2M_AUTH_MODE` must be `hybrid` or `k8s`. In `legacy` it rejects bearer tokens, so `hybrid` mode here silently keeps using basic auth.
+- Its token audience (`KUBERNETES_M2M_AUDIENCE`) must be `dbaas`, which is the default.
+- The database classifier namespace must be the namespace of the token, which is the case for the operator.
+- The aggregator derives roles from the ServiceAccount name. The operator's `mistral-operator` account gets the default `DB_CLIENT` role, which is enough to look up and create databases. Migrating an external database to DBaaS needs `MIGRATION_CLIENT`; until the aggregator grants it to `mistral-operator`, that call is rejected with `401` / `403` and `hybrid` mode falls back to basic auth, while `k8s` mode fails.
 
 **Without dbaas to with dbaas-Clean Install:** With dbaas integration enabled in clean install mode, dbaas will create fresh db. Cleanup of existing db would be skipped in this case and can be manually done using ```DROP DATABASE IF EXISTS <db_name>```. However, configuring postgres admin credentials are necessary for performing privileged operations on db.
 

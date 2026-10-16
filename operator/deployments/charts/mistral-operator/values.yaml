@@ -2,9 +2,9 @@
 ## This is a YAML-formatted file.
 ## Declare variables to be passed into your templates.
 
+M2M_AUTH_MODE: "legacy"
 # Name of MistralService Custom Resource
 name: mistral-service
-
 operatorImage: "ghcr.io/netcracker/qubership-mistral-operator-img:main"
 operator:
   imagePullPolicy: Always
@@ -202,6 +202,9 @@ mistralCommonParams:
       - type: extract
         field: "iss"
         pattern: "*/realms/{value}"
+    k8sSa:
+      # allowed audience for k8s SA tokens
+      audience: "netcracker"
   dbaas:
     agentUrl: "http://dbaas-agent:8080"
     aggregatorUrl: "http://dbaas-aggregator.dbaas:8080"

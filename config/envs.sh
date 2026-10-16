@@ -14,6 +14,8 @@ unset_if_empty HTTP_PROXY
 unset_if_empty HTTPS_PROXY
 unset_if_empty NO_PROXY
 
+export K8S_SA_AUDIENCE="${K8S_SA_AUDIENCE:-netcracker}"
+
 ENGINE_TOPIC="${QUEUE_NAME_PREFIX}_mistral_engine"
 EXECUTOR_TOPIC="${QUEUE_NAME_PREFIX}_mistral_executor"
 NOTIFIER_TOPIC="${QUEUE_NAME_PREFIX}_mistral_notifier"
