@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import base64
-import re
 import struct
 import threading
 
@@ -34,38 +33,6 @@ LOG = logging.getLogger(__name__)
 
 _PEM_CACHE = {}
 _PEM_CACHE_LOCK = threading.RLock()
-
-TOKEN_HEADER_KEY = 'Authorization'
-AUTH_TOKEN_KEY = 'nc_token_key'
-AUTH_HEADER_PATTERN = re.compile(r'^\w+\s(.*)$')
-
-
-def extract_token_from_header(headers):
-    header_with_token = headers.get(TOKEN_HEADER_KEY)
-
-    if not header_with_token:
-        token = headers.get('X-Auth-Token')
-
-        if token:
-            return token
-
-        raise exc.UnauthorizedException(
-            message='There is no token in headers(X-Auth-Token,Authorization)')
-
-    header_pattern_match = AUTH_HEADER_PATTERN.match(header_with_token)
-    if header_pattern_match is None:
-        raise exc.UnauthorizedException('Does not match pattern ' +
-                                        AUTH_HEADER_PATTERN.pattern)
-
-    groups = header_pattern_match.groups()
-
-    if len(groups) != 1:
-        raise exc.UnauthorizedException(
-            'Not found the token in the header. '
-            'Authorization header: {}'.format(header_with_token)
-        )
-
-    return groups[0]
 
 
 def intarr2long(arr):
@@ -107,7 +74,7 @@ class MitreidAuthHandler(auth.AuthHandler):
 
     def authenticate(self, req):
         headers = req.headers
-        token = extract_token_from_header(headers)
+        token = auth.extract_token_from_header(headers)
         pem = get_pem()
         token = jwt.decode(token, key=pem, algorithms='RS256')
         tenant = token.get("tenant-id")
