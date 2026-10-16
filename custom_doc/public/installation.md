@@ -334,7 +334,9 @@ The Mistral Authentication parameters used for the configurations are specified 
 |Parameter   |Type  |Mandatory|Default value|Description                                                        |
 |------------|------|---------|-------------|-------------------------------------------------------------------|
 |mistralCommonParams.auth.enable|bool|no|'False'|This parameter specifies whether authentication is enabled.|
-|mistralCommonParams.auth.type|string|no|'mitreid'|This parameter specifies the authentication type.|
+|mistralCommonParams.auth.type|string|no|'keycloak-oidc'|This parameter specifies the authentication type. Valid values: `keycloak-oidc`, `k8s-sa`, `keystone`, `mitreid`, `hybrid` (k8s-sa with keycloak-oidc fallback).|
+|M2M_AUTH_MODE|string|no|'legacy'|M2M authentication mode, referring it the operator resolves into the effective `auth.type` before the Mistral services start. Valid values: `legacy` (→ `keycloak-oidc`), `hybrid` (→ `hybrid`), `k8s` (→ `k8s-sa`). Takes precedence over `auth.type`. See [M2M Authentication Mode](#m2m-authentication-mode).|
+|mistralCommonParams.auth.k8sSa.audience|string|no|'netcracker'|Audience (`aud`) required in inbound ServiceAccount tokens. Used when M2M_AUTH_MODE is k8s|
 |mistralCommonParams.auth.certs|string|no|''|This parameter specifies the certificate to verify idpExternalServer.|
 |mistralCommonParams.auth.projectRules|list|no|`[{"type":"extract","field":"iss","pattern":"*/realms/{value}"}]`|This parameter specifies the rules for resolving the project ID from token claims. For more information, see [Project ID Resolution](#project-id-resolution).|
 |mistralCommonParams.defaultProjectId|string|yes|''|This parameter specifies the fallback project ID to use when authentication is not enabled or no project rule matches the token.|
@@ -433,6 +435,102 @@ mistralCommonParams:
       - type: extract
         field: "iss"
         pattern: "*/realms/{value}"
+```
+
+## Kubernetes Service Account Authentication
+
+When `mistralCommonParams.auth.type` is set to `k8s-sa`, Mistral authenticates
+inbound API requests using Kubernetes ServiceAccount JWT tokens. Tokens are
+validated locally: Mistral discovers the cluster's OIDC issuer
+(`<issuer>/.well-known/openid-configuration`), downloads its public signing keys
+(JWKS) and verifies the token signature, `exp`, `iss`, `aud` and `iat`.
+
+- Only tokens whose `aud` claim contains **`netcracker`** are accepted by default.
+  Set `mistralCommonParams.auth.k8sSa.audience` to use another audience.
+- The trusted **issuer** is taken from the pod's default ServiceAccount token.
+- Keys are cached and refreshed every 24 hours, and when a token signed with an
+  unknown key id arrives (at most once per 5 minutes). Discovery / JWKS requests are
+  retried up to 5 times with exponential backoff on network errors and HTTP 5xx.
+- On **GKE** (detected automatically through the metadata server) the discovery / JWKS
+  requests are sent anonymously, because the issuer endpoint requires it.
+- A token stays valid until its `exp`.
+
+### Example Configuration
+
+```yaml
+mistralCommonParams:
+  auth:
+    enable: true
+    type: k8s-sa
+    projectRules:
+      - type: extract
+        field: namespace
+        pattern: "{value}"
+  defaultProjectId: "default"
+```
+
+The `projectRules` example above maps the ServiceAccount's namespace directly to
+the Mistral project ID. Adjust the rules to match your project ID scheme — see
+[Project ID Resolution](#project-id-resolution) for details.
+
+> **Note:** M2M_AUTH_MODE ultimately decides the effective authentication type.See [M2M Authentication Mode](#m2m-authentication-mode).
+
+### Authorization scope
+
+With `k8s-sa`, authorization is **project-scoped only**. Mistral does not
+perform any role-based access checks (no admin/member role enforcement) for
+this auth type. Access is granted to any request carrying a valid ServiceAccount
+token, scoped to the project ID resolved from that token's claims.
+
+> **Note:** Role-based authorization is intentionally excluded because Mistral's
+> admin-gated endpoints are not used in current ServiceAccount-based deployments.
+> If role enforcement becomes necessary in the future, it can be introduced by
+> implementing a ServiceAccount-name-to-role mapping (e.g. mapping specific SA
+> names or groups to `admin`/`member` roles) in the `K8sSAAuthHandler`.
+
+## M2M Authentication Mode
+
+`M2M_AUTH_MODE` is a top-level Helm parameter that provides a single control for machine-to-machine authentication. When set, the operator resolves it into the effective `auth.type`.
+
+| Mode | Effective `auth.type` | Inbound validation |
+|------|----------------------|--------------------|
+| `legacy` | `keycloak-oidc` | Keycloak OIDC JWT |
+| `hybrid` | `hybrid` | K8s SA, falls back to Keycloak OIDC |
+| `k8s` | `k8s-sa` | K8s SA only |
+
+### `legacy`
+
+All tokens are validated against Keycloak. Equivalent to setting `auth.type: keycloak-oidc`.
+
+```yaml
+M2M_AUTH_MODE: legacy
+mistralCommonParams:
+  auth:
+    enable: true
+```
+
+### `hybrid`
+
+Mistral attempts K8s ServiceAccount (JWKS) validation first; if that fails it falls back to Keycloak JWT validation.
+
+```yaml
+M2M_AUTH_MODE: hybrid
+mistralCommonParams:
+  auth:
+    enable: true
+```
+
+> **Note:** `hybrid` requires access to the cluster's OIDC discovery / JWKS endpoints (granted to all authenticated ServiceAccounts by the built-in `system:service-account-issuer-discovery` ClusterRole) and the Keycloak OAuth2 credentials (`secrets.idpClientId`, `secrets.idpClientSecret`).
+
+### `k8s`
+
+All tokens are validated against the cluster's JWKS.  Equivalent to setting `auth.type: k8s-sa`.
+
+```yaml
+M2M_AUTH_MODE: k8s
+mistralCommonParams:
+  auth:
+    enable: true
 ```
 
 ## Kafka Notification Parameters

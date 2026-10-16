@@ -99,6 +99,7 @@ def error_handler(f):
 class Mistral(object):
 
     def __init__(self, mistral_url='1', auth_enable='f', auth_type='mitreid',
+                 m2m_auth_mode=None,
                  client_register_token=None, idp_server=None,
                  tenant=None, idp_user=None, idp_password=None,
                  multitenancy_enabled='False', idp_client_id=None,
@@ -106,6 +107,7 @@ class Mistral(object):
         self._mistral_url = mistral_url
         self._auth_enable = util.strtobool(auth_enable.lower())
         self._auth_type = auth_type
+        self._m2m_auth_mode = (m2m_auth_mode or '').lower()
         self._main_tenant = tenant
         self._idp_user = idp_user
         self._idp_password = idp_password
@@ -131,6 +133,18 @@ class Mistral(object):
                                                 client_register_token,
                                                 idp_client_id=idp_client_id,
                                                 idp_client_secret=idp_client_secret)
+            elif self._auth_type == 'k8s-sa':
+                self._idp = idp.K8sSALibrary()
+            elif self._auth_type == 'hybrid':
+                try:
+                    k8s = idp.K8sSALibrary()
+                    k8s.get_token()
+                    self._idp = k8s
+                except Exception:
+                    self._idp = idp.KeycloakLibrary(idp_server,
+                                                    client_register_token,
+                                                    idp_client_id=idp_client_id,
+                                                    idp_client_secret=idp_client_secret)
 
         logger.info(f'Mistral parameters: {self.__dict__}')
 
@@ -642,9 +656,10 @@ class Mistral(object):
         res = self._security_request(
             'GET',
             self._mistral_url + '/executions?' + query
-        ).json()
+        )
+        assert_response(res)
 
-        return res['executions']
+        return res.json()['executions']
 
     @error_handler
     def delete_stuck_executions(self):
@@ -983,6 +998,25 @@ class Mistral(object):
         assert_response(res)
 
         return res.json()['actions']
+
+    def get_workflows_http_status_with_token(self, token):
+        """Status of GET /workflows with an explicit bearer token."""
+        res = requests.get(self._mistral_url + '/workflows',
+                           headers={'Authorization': 'Bearer ' + token},
+                           timeout=30)
+
+        return res.status_code
+
+    def get_workflows_http_status_with_default_sa_token(self):
+        """Status of GET /workflows with the pod's default SA token.
+
+        Its audience is the cluster API server, not the one Mistral requires,
+        so it must be rejected.
+        """
+        with open(idp.K8sSALibrary.DEFAULT_TOKEN_PATH, 'r') as f:
+            token = f.read().strip()
+
+        return self.get_workflows_http_status_with_token(token)
 
     def _security_request(self, *args, **kwargs):
         headers = kwargs.get('headers')
