@@ -10,6 +10,7 @@
   "assignees": ["wortellen"],
   "rebaseWhen": "conflicted",                                                                                                                                                                                                                                         35% used
   "forkProcessing": "enabled",
+  "baseBranches": ["main"],
   "packageRules": [
     {
       "description": ["Skip our own images in Helm chart values: the release pipeline rewrites their tags and cannot handle pinned digests"],
