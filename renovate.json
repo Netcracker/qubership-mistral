@@ -8,7 +8,7 @@
     "github>Netcracker/renovate-config:apm"
   ],
   "assignees": ["wortellen"],
-  "rebaseWhen": "conflicted",                                                                                                                                                                                                                                         35% used
+  "rebaseWhen": "conflicted",
   "forkProcessing": "enabled",
   "baseBranches": ["main"],
   "packageRules": [
