@@ -1,5 +1,5 @@
 certifi>=2024.7.4
-confluent-kafka==1.6.1
+confluent-kafka==1.9.2
 gevent
 jsonschema<4.6.0
 kubernetes<36
