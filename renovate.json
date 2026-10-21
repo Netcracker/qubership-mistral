@@ -8,7 +8,8 @@
     "github>Netcracker/renovate-config:apm"
   ],
   "assignees": ["wortellen"],
-  "rebaseWhen": "conflicted",
+  "rebaseWhen": "conflicted",                                                                                                                                                                                                                                         35% used
+  "forkProcessing": "enabled",
   "packageRules": [
     {
       "description": ["Skip our own images in Helm chart values: the release pipeline rewrites their tags and cannot handle pinned digests"],
