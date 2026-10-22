@@ -23,6 +23,7 @@ from unittest import mock
 from oslo_config import cfg
 
 from mistral import auth
+from mistral import exceptions as exc
 from mistral.services import secure_request as sr
 from mistral.tests.unit import base
 
@@ -112,11 +113,11 @@ class SecureRequestAuthTypeTest(base.BaseTest):
         self.assertLessEqual(sr.TOKEN['expires_in'], 100)
         self.assertGreater(sr.TOKEN['expires_in'], 90)
 
-    def test_k8s_sa_missing_token_file_raises(self):
+    def test_k8s_sa_missing_projected_token_mount_is_unauthorized(self):
         cfg.CONF.set_default('auth_type', 'k8s-sa')
 
         with mock.patch.object(sr, '_auth_using_keycloak') as keycloak:
-            self.assertRaises(OSError, sr.set_auth_token, {})
+            self.assertRaises(exc.UnauthorizedException, sr.set_auth_token, {})
 
         keycloak.assert_not_called()
 

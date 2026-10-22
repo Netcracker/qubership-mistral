@@ -22,6 +22,7 @@ from oslo_log import log
 import requests
 
 from mistral import auth
+from mistral import exceptions as exc
 
 """
 Encapsulates a raw authentication token from IDP.
@@ -201,8 +202,17 @@ def _auth_using_k8s_sa():
     """Uses the projected ServiceAccount token of the [k8s_sa] audience.
     """
     token_path = _get_k8s_sa_audience_token_path()
-    with open(token_path, 'r') as f:
-        token = f.read().strip()
+    try:
+        with open(token_path, 'r') as f:
+            token = f.read().strip()
+    except OSError as e:
+        LOG.warning(
+            "Failed to read projected Kubernetes ServiceAccount token "
+            "from %s: %s", token_path, e
+        )
+        raise exc.UnauthorizedException(
+            message="Kubernetes ServiceAccount token is not available"
+        )
 
     expires_in = 3600
     try:

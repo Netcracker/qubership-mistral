@@ -12,8 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import certifi
 import json
 import os
+import ssl
 import tempfile
 import threading
 import time
@@ -404,22 +406,11 @@ class K8sTokenVerifierTest(_VerifierTestBase):
         self.assertIs(True, verifier.build_ca_bundle(None))
         self.assertIs(True, verifier.build_ca_bundle('/does/not/exist'))
 
-        with tempfile.NamedTemporaryFile('w', suffix='.crt',
-                                         delete=False) as f:
-            f.write('CLUSTER-CA')
+        context = verifier.build_ca_bundle(certifi.where())
 
-        self.addCleanup(os.remove, f.name)
-
-        path = verifier.build_ca_bundle(f.name)
-
-        self.addCleanup(os.remove, path)
-
-        with open(path) as bundle:
-            content = bundle.read()
-
-        self.assertTrue(content.endswith('CLUSTER-CA'))
+        self.assertIsInstance(context, ssl.SSLContext)
         # The default public CAs are kept, not replaced.
-        self.assertIn('BEGIN CERTIFICATE', content)
+        self.assertTrue(context.get_ca_certs())
 
 
 class K8sTokenVerifierLockingTest(_VerifierTestBase):

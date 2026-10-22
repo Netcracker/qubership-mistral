@@ -33,7 +33,7 @@ The verifier:
 
 import os
 import random
-import tempfile
+import ssl
 import threading
 import time
 from urllib import parse
@@ -78,6 +78,26 @@ class TokenVerificationError(Exception):
 
 class _RetryableError(Exception):
     pass
+
+
+class _SSLContextAdapter(requests.adapters.HTTPAdapter):
+    """Requests adapter that pins a pre-built SSLContext for HTTPS.
+
+    This avoids writing a temporary CA bundle to disk while still working
+    with older ``requests`` versions that do not accept an ``SSLContext``
+    directly as ``Session.verify``.
+    """
+
+    def __init__(self, ssl_context, **kwargs):
+        self._ssl_context = ssl_context
+        super(_SSLContextAdapter, self).__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False,
+                         **pool_kwargs):
+        pool_kwargs['ssl_context'] = self._ssl_context
+        return super(_SSLContextAdapter, self).init_poolmanager(
+            connections, maxsize, block, **pool_kwargs
+        )
 
 
 def get_provider_url(issuer):
@@ -152,6 +172,9 @@ def build_ca_bundle(ca_file):
     The cluster CA is *added* to the default (certifi) bundle rather than
     replacing it, because on EKS / AKS the issuer is a public HTTPS endpoint,
     while on a plain cluster it is the API server signed by the cluster CA.
+
+    The returned value is an ``ssl.SSLContext`` that contains both bundles in
+    memory.
     """
     if not ca_file or not os.path.isfile(ca_file):
         return True
@@ -163,15 +186,15 @@ def build_ca_bundle(ca_file):
         with open(ca_file, 'rb') as f:
             cluster_ca = f.read()
 
-        fd, path = tempfile.mkstemp(prefix='mistral-k8s-ca-', suffix='.pem')
+        context = ssl.create_default_context()
+        context.load_verify_locations(
+            cadata=(
+                bundle.decode('utf-8') + '\n' + cluster_ca.decode('utf-8')
+            )
+        )
 
-        with os.fdopen(fd, 'wb') as out:
-            out.write(bundle)
-            out.write(b'\n')
-            out.write(cluster_ca)
-
-        return path
-    except OSError as e:
+        return context
+    except (OSError, ssl.SSLError) as e:
         LOG.warning(
             "Could not build CA bundle with %s, using cluster CA only: %s",
             ca_file, e
@@ -198,7 +221,9 @@ class K8sTokenVerifier(object):
         :param token_func: Callable returning the pod's current SA token,
             used to authenticate OIDC discovery / JWKS requests.
         :param jwks_url: Optional JWKS URL, skips OIDC discovery.
-        :param verify: ``verify`` argument for ``requests``.
+        :param verify: ``verify`` argument for ``requests``. An
+            ``ssl.SSLContext`` may also be passed; it is mounted as a custom
+            HTTPS adapter so that no temporary CA bundle file is required.
         :param anonymous: Do not send the SA token (required on GKE).
         """
         if not issuer:
@@ -218,7 +243,12 @@ class K8sTokenVerifier(object):
         self._sleep = sleep
 
         self._session = session or requests.Session()
-        self._session.verify = verify
+
+        if isinstance(verify, ssl.SSLContext):
+            self._session.verify = True
+            self._session.mount('https://', _SSLContextAdapter(verify))
+        else:
+            self._session.verify = verify
 
         # _lock only protects the refresh bookkeeping and is never held
         # during network I/O.
