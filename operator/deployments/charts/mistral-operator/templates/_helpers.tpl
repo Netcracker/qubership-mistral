@@ -486,6 +486,13 @@ Find mistral tests image in open source values.
 {{- end -}}
 
 {{/*
+Find blue-green agent image in open source values.
+*/}}
+{{- define "mistral.blueGreenAgentImage" -}}
+  {{- printf "%s" .Values.bluegreenAgent.image -}}
+{{- end -}}
+
+{{/*
 Find disaster recovery image in open source values.
 */}}
 {{- define "disasterRecovery.image" -}}
