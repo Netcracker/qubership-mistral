@@ -15,6 +15,7 @@
 import json
 import os
 import tempfile
+import threading
 import time
 from unittest import mock
 
@@ -103,7 +104,15 @@ class _VerifierTestBase(base.BaseTest):
         )
         params.update(kwargs)
 
-        return verifier.K8sTokenVerifier(**params)
+        v = verifier.K8sTokenVerifier(**params)
+
+        self.addCleanup(self._wait_for_refresh_to_finish, v)
+
+        return v
+
+    def _wait_for_refresh_to_finish(self, v, timeout=5):
+        if v._refresh_lock.acquire(timeout=timeout):
+            v._refresh_lock.release()
 
 
 class K8sTokenVerifierTest(_VerifierTestBase):
@@ -411,6 +420,210 @@ class K8sTokenVerifierTest(_VerifierTestBase):
         self.assertTrue(content.endswith('CLUSTER-CA'))
         # The default public CAs are kept, not replaced.
         self.assertIn('BEGIN CERTIFICATE', content)
+
+
+class K8sTokenVerifierLockingTest(_VerifierTestBase):
+    """A slow or failing JWKS refresh must not stall the other requests."""
+
+    TIMEOUT = 5
+
+    def setUp(self):
+        super(K8sTokenVerifierLockingTest, self).setUp()
+
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.threads = []
+        self.addCleanup(self.release.set)
+
+    def _slow_sleep(self, _seconds):
+        # Stands for the retry back-off of a failing refresh.
+        self.entered.set()
+        self.release.wait(self.TIMEOUT)
+
+    def _slow_jwks(self):
+        body = json.dumps({'keys': [self.key.jwk()]})
+
+        def respond(_request, _context):
+            self.entered.set()
+            self.release.wait(self.TIMEOUT)
+
+            return body
+
+        self.jwks = self.mock.get(JWKS_URL, text=respond)
+
+    def _start(self, func):
+        thread = threading.Thread(target=func, daemon=True)
+        thread.start()
+        self.threads.append(thread)
+
+        return thread
+
+    def _join_all(self):
+        for thread in self.threads:
+            thread.join(self.TIMEOUT)
+            self.assertFalse(thread.is_alive())
+
+    def test_cached_keys_are_read_without_any_lock(self):
+        v = self._verifier()
+        token = self.key.sign(_claims())
+        v.verify(token)
+        results = []
+
+        # Both locks are taken, as if a refresh was in progress.
+        with v._lock, v._refresh_lock:
+            self._start(lambda: results.append(v.verify(token)['sub']))
+            self._join_all()
+
+        self.assertEqual([SUBJECT], results)
+
+    def test_stuck_periodic_refresh_does_not_block_requests(self):
+        v = self._verifier(
+            refresh_interval=1,
+            unknown_kid_refresh_interval=1,
+            sleep=self._slow_sleep
+        )
+        token = self.key.sign(_claims())
+        v.verify(token)
+
+        # The API server fails now: the refresh sits in its retry back-off.
+        self.jwks = self.mock.get(JWKS_URL, status_code=500)
+
+        with mock.patch.object(
+                verifier.time, 'monotonic', return_value=time.monotonic() + 10
+        ):
+            started = time.monotonic()
+            claims = [v.verify(token) for _i in range(4)]
+
+            self.assertTrue(self.entered.wait(self.TIMEOUT))
+
+        # Served from the cache straight away, with a single refresh running.
+        self.assertLess(time.monotonic() - started, self.TIMEOUT)
+        self.assertEqual([SUBJECT] * 4, [c['sub'] for c in claims])
+        self.assertEqual(1, self.jwks.call_count)
+
+        self.release.set()
+        self._wait_for_refresh_to_finish(v)
+
+    def test_requests_waiting_for_the_first_load_reuse_its_keys(self):
+        self._slow_jwks()
+        v = self._verifier()
+        token = self.key.sign(_claims())
+        results = []
+
+        self._start(lambda: results.append(v.verify(token)['sub']))
+        self.assertTrue(self.entered.wait(self.TIMEOUT))
+        self._start(lambda: results.append(v.verify(token)['sub']))
+        time.sleep(0.1)
+        self.release.set()
+        self._join_all()
+
+        self.assertEqual([SUBJECT, SUBJECT], results)
+        self.assertEqual(1, self.jwks.call_count)
+
+    def test_failed_first_load_is_not_retried_by_every_waiting_request(self):
+        self.mock.get(DISCOVERY_URL, status_code=500)
+        v = self._verifier(sleep=self._slow_sleep)
+        token = self.key.sign(_claims())
+        errors = []
+
+        def call():
+            try:
+                v.verify(token)
+            except verifier.TokenVerificationError as e:
+                errors.append(str(e))
+
+        self._start(call)
+        self.assertTrue(self.entered.wait(self.TIMEOUT))
+        self._start(call)
+        self._start(call)
+        time.sleep(0.1)
+        self.release.set()
+        self._join_all()
+
+        discovery_calls = [
+            r for r in self.mock.request_history if r.url == DISCOVERY_URL
+        ]
+
+        # One retry sequence (5 attempts) for all three requests.
+        self.assertEqual(5, len(discovery_calls))
+        self.assertEqual(3, len(errors))
+        self.assertEqual(
+            2, len([e for e in errors if 'retrying later' in e])
+        )
+
+    def test_first_load_is_retried_after_the_retry_interval(self):
+        self.mock.get(DISCOVERY_URL, status_code=500)
+        v = self._verifier(failed_load_retry_interval=5)
+        token = self.key.sign(_claims())
+
+        self.assertRaises(verifier.TokenVerificationError, v.verify, token)
+        self.assertRaises(verifier.TokenVerificationError, v.verify, token)
+
+        def discovery():
+            return len([
+                r for r in self.mock.request_history
+                if r.url == DISCOVERY_URL
+            ])
+
+        self.assertEqual(5, discovery())
+
+        with mock.patch.object(
+                verifier.time, 'monotonic', return_value=time.monotonic() + 10
+        ):
+            self.assertRaises(verifier.TokenVerificationError, v.verify, token)
+
+        self.assertEqual(10, discovery())
+
+    def test_first_load_recovers_once_the_api_server_is_back(self):
+        self.mock.get(DISCOVERY_URL, status_code=500)
+        v = self._verifier(failed_load_retry_interval=5)
+        token = self.key.sign(_claims())
+
+        self.assertRaises(verifier.TokenVerificationError, v.verify, token)
+
+        self.mock.get(DISCOVERY_URL, json={'jwks_uri': JWKS_URL})
+
+        with mock.patch.object(
+                verifier.time, 'monotonic', return_value=time.monotonic() + 10
+        ):
+            self.assertEqual(SUBJECT, v.verify(token)['sub'])
+
+    def test_unknown_kid_uses_the_keys_of_a_running_refresh(self):
+        v = self._verifier(
+            refresh_interval=1, unknown_kid_refresh_interval=1
+        )
+        v.verify(self.key.sign(_claims()))
+        rotated = _Key('key-2')
+
+        # The periodic refresh loads the rotated key slowly ...
+        body = json.dumps({'keys': [self.key.jwk(), rotated.jwk()]})
+
+        def respond(_request, _context):
+            self.entered.set()
+            self.release.wait(self.TIMEOUT)
+
+            return body
+
+        self.jwks = self.mock.get(JWKS_URL, text=respond)
+
+        with mock.patch.object(
+                verifier.time, 'monotonic', return_value=time.monotonic() + 10
+        ):
+            v.verify(self.key.sign(_claims()))
+            self.assertTrue(self.entered.wait(self.TIMEOUT))
+
+            # ... and a request with the new key waits for it instead of
+            # fetching the JWKS a second time.
+            results = []
+            self._start(
+                lambda: results.append(v.verify(rotated.sign(_claims())))
+            )
+            time.sleep(0.1)
+            self.release.set()
+            self._join_all()
+
+        self.assertEqual(1, len(results))
+        self.assertEqual(1, self.jwks.call_count)
 
 
 class K8sSAAuthHandlerTest(_VerifierTestBase):

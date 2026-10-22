@@ -334,8 +334,8 @@ The Mistral Authentication parameters used for the configurations are specified 
 |Parameter   |Type  |Mandatory|Default value|Description                                                        |
 |------------|------|---------|-------------|-------------------------------------------------------------------|
 |mistralCommonParams.auth.enable|bool|no|'False'|This parameter specifies whether authentication is enabled.|
-|mistralCommonParams.auth.type|string|no|'keycloak-oidc'|This parameter specifies the authentication type. Valid values: `keycloak-oidc`, `k8s-sa`, `keystone`, `mitreid`, `hybrid` (k8s-sa with keycloak-oidc fallback).|
-|M2M_AUTH_MODE|string|no|'legacy'|M2M authentication mode, referring it the operator resolves into the effective `auth.type` before the Mistral services start. Valid values: `legacy` (→ `keycloak-oidc`), `hybrid` (→ `hybrid`), `k8s` (→ `k8s-sa`). Takes precedence over `auth.type`. See [M2M Authentication Mode](#m2m-authentication-mode).|
+|mistralCommonParams.auth.type|string|no|'keycloak-oidc'|This parameter specifies the authentication type. Valid values: `keycloak-oidc`, `k8s-sa`, `keystone`, `mitreid` (k8s-sa with keycloak-oidc fallback).|
+|M2M_AUTH_MODE|string|no|'legacy'|M2M authentication mode, referring it the operator resolves into the effective `auth.type` before the Mistral services start. Valid values: `legacy`, `hybrid`, `k8s`. Takes precedence over `auth.type`. See [M2M Authentication Mode](#m2m-authentication-mode).|
 |mistralCommonParams.auth.k8sSa.audience|string|no|'netcracker'|Audience (`aud`) required in inbound ServiceAccount tokens. Used when M2M_AUTH_MODE is k8s|
 |mistralCommonParams.auth.certs|string|no|''|This parameter specifies the certificate to verify idpExternalServer.|
 |mistralCommonParams.auth.projectRules|list|no|`[{"type":"extract","field":"iss","pattern":"*/realms/{value}"}]`|This parameter specifies the rules for resolving the project ID from token claims. For more information, see [Project ID Resolution](#project-id-resolution).|
@@ -492,11 +492,11 @@ token, scoped to the project ID resolved from that token's claims.
 
 `M2M_AUTH_MODE` is a top-level Helm parameter that provides a single control for machine-to-machine authentication. When set, the operator resolves it into the effective `auth.type`.
 
-| Mode | Effective `auth.type` | Inbound validation |
-|------|----------------------|--------------------|
-| `legacy` | `keycloak-oidc` | Keycloak OIDC JWT |
-| `hybrid` | `hybrid` | K8s SA, falls back to Keycloak OIDC |
-| `k8s` | `k8s-sa` | K8s SA only |
+| Mode | Inbound validation |
+|------|--------------------|
+| `legacy` | Keycloak OIDC JWT |
+| `hybrid` | K8s SA, falls back to Keycloak OIDC |
+| `k8s` | K8s SA only |
 
 ### `legacy`
 

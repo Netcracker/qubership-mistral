@@ -55,6 +55,8 @@ LEEWAY_SEC = 30
 
 DEFAULT_REFRESH_INTERVAL = 24 * 60 * 60
 DEFAULT_UNKNOWN_KID_REFRESH_INTERVAL = 5 * 60
+# How long to fail fast after the very first key load failed
+DEFAULT_FAILED_LOAD_RETRY_INTERVAL = 5
 
 RETRY_MAX_ATTEMPTS = 5
 RETRY_INITIAL_DELAY = 0.5
@@ -134,7 +136,10 @@ def is_gke(timeout=GKE_PROBE_TIMEOUT):
             headers={'Metadata-Flavor': 'Google'},
             timeout=timeout
         )
-    except requests.RequestException:
+    except requests.RequestException as e:
+        LOG.debug("GCE metadata server is not reachable, assuming the pod "
+                  "does not run on GKE: %s", e)
+
         return False
 
     return (resp.status_code == 200 and
@@ -183,6 +188,8 @@ class K8sTokenVerifier(object):
                  refresh_interval=DEFAULT_REFRESH_INTERVAL,
                  unknown_kid_refresh_interval=(
                      DEFAULT_UNKNOWN_KID_REFRESH_INTERVAL),
+                 failed_load_retry_interval=(
+                     DEFAULT_FAILED_LOAD_RETRY_INTERVAL),
                  session=None, sleep=time.sleep):
         """
         :param issuer: Trusted ``iss`` value.
@@ -207,14 +214,22 @@ class K8sTokenVerifier(object):
         self._anonymous = anonymous
         self._refresh_interval = refresh_interval
         self._unknown_kid_refresh_interval = unknown_kid_refresh_interval
+        self._failed_load_retry_interval = failed_load_retry_interval
         self._sleep = sleep
 
         self._session = session or requests.Session()
         self._session.verify = verify
 
+        # _lock only protects the refresh bookkeeping and is never held
+        # during network I/O.
         self._lock = threading.Lock()
+        # _refresh_lock makes sure that only one JWKS refresh runs at a time. Cached keys are read without any lock:
+        # self._keys is replaced as a whole and never mutated.
+        self._refresh_lock = threading.Lock()
         self._keys = None
         self._loaded_at = 0.0
+        self._load_failed_at = float('-inf')
+        self._load_error = None
         self._last_periodic_attempt = float('-inf')
         self._last_unknown_kid_refresh = float('-inf')
 
@@ -272,36 +287,118 @@ class K8sTokenVerifier(object):
             )
 
     def _get_signing_key(self, kid):
-        with self._lock:
-            now = time.monotonic()
+        keys = self._keys
 
-            if self._keys is None:
-                self._refresh_keys()
-            elif (now - self._loaded_at >= self._refresh_interval and
-                  now - self._last_periodic_attempt >=
-                  self._unknown_kid_refresh_interval):
-                self._last_periodic_attempt = now
+        if keys is None:
+            keys = self._load_keys()
 
-                try:
-                    self._refresh_keys()
-                except TokenVerificationError as e:
-                    LOG.warning(
-                        "JWKS refresh failed, using cached keys: %s", e
-                    )
+        self._start_periodic_refresh_if_due()
 
-            key = self._keys.get(kid)
+        key = keys.get(kid)
 
-            if key is None and (
-                    now - self._last_unknown_kid_refresh >=
-                    self._unknown_kid_refresh_interval):
-                LOG.info("Unknown key id '%s', refreshing JWKS", kid)
-
-                self._last_unknown_kid_refresh = now
-                self._refresh_keys()
-                key = self._keys.get(kid)
+        if key is None:
+            key = self._refresh_for_unknown_kid(kid)
 
         if key is None:
             raise TokenVerificationError("No signing key with kid '%s'" % kid)
+
+        return key
+
+    def _load_keys(self):
+        """Loads the keys for the first time.
+        """
+        with self._refresh_lock:
+            keys = self._keys
+
+            if keys is not None:
+                return keys
+
+            # The previous load failed a moment ago: fail fast instead
+            # of repeating the whole retry sequence for every queued request.
+            if (time.monotonic() - self._load_failed_at <
+                    self._failed_load_retry_interval):
+                raise TokenVerificationError(
+                    "Signing keys are not available, retrying later: %s"
+                    % self._load_error
+                )
+
+            try:
+                self._refresh_keys()
+            except TokenVerificationError as e:
+                self._load_failed_at = time.monotonic()
+                self._load_error = str(e)
+
+                raise
+
+            return self._keys
+
+    def _start_periodic_refresh_if_due(self):
+        """Refreshes the keys in the background once they are old enough.
+
+        Requests keep using the cached keys meanwhile, whether the refresh is
+        slow or fails.
+        """
+        now = time.monotonic()
+
+        if now - self._loaded_at < self._refresh_interval:
+            return
+
+        with self._lock:
+            if (now - self._last_periodic_attempt <
+                    self._unknown_kid_refresh_interval):
+                return
+
+            # Another refresh is already running.
+            if not self._refresh_lock.acquire(blocking=False):
+                return
+
+            self._last_periodic_attempt = now
+
+        try:
+            threading.Thread(
+                target=self._periodic_refresh,
+                name='k8s-jwks-refresh',
+                daemon=True
+            ).start()
+        except Exception:
+            self._refresh_lock.release()
+
+            raise
+
+    def _periodic_refresh(self):
+        # Runs with _refresh_lock held by the caller; releases it.
+        try:
+            self._refresh_keys()
+        except TokenVerificationError as e:
+            LOG.warning("JWKS refresh failed, using cached keys: %s", e)
+        except Exception:
+            LOG.exception("Unexpected error during JWKS refresh")
+        finally:
+            self._refresh_lock.release()
+
+    def _refresh_for_unknown_kid(self, kid):
+        """Refreshes the keys for a token signed with an unknown key id.
+
+        Rate limited: within the interval the request just fails.
+        """
+        now = time.monotonic()
+
+        with self._lock:
+            if (now - self._last_unknown_kid_refresh <
+                    self._unknown_kid_refresh_interval):
+                return None
+
+            self._last_unknown_kid_refresh = now
+
+        LOG.info("Unknown key id '%s', refreshing JWKS", kid)
+
+        with self._refresh_lock:
+            # A refresh that was already running may have loaded the key.
+            key = self._keys.get(kid)
+
+            if key is None:
+                self._refresh_keys()
+                key = self._keys.get(kid)
 
         return key
 
