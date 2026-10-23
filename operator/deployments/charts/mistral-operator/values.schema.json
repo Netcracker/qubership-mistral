@@ -358,6 +358,9 @@
                 }
             }
         },
+        "M2M_AUTH_MODE": {
+            "type": "string"
+        },
         "mistralCommonParams": {
             "type": "object",
             "additionalProperties": true,
@@ -383,6 +386,15 @@
                         },
                         "cloudCoreUsername": {
                             "type": "string"
+                        },
+                        "k8sSa": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "audience": {
+                                    "type": "string"
+                                }
+                            }
                         },
                         "projectRules": {
                             "type": "array",

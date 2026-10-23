@@ -1,5 +1,20 @@
 {{/* vim: set filetype=mustache: */}}
 {{/*
+Resolve the effective auth type from M2M_AUTH_MODE (if set) or auth.type.
+An unrecognized M2M_AUTH_MODE value falls back to legacy mode.
+*/}}
+{{- define "mistral.effectiveAuthType" -}}
+{{- $m2mMode := default "" .Values.M2M_AUTH_MODE | lower -}}
+{{- $authType := default "keycloak-oidc" .Values.mistralCommonParams.auth.type | lower -}}
+{{- if eq $m2mMode "legacy" -}}keycloak-oidc
+{{- else if eq $m2mMode "k8s" -}}k8s-sa
+{{- else if eq $m2mMode "hybrid" -}}hybrid
+{{- else if eq $m2mMode "" -}}{{ $authType }}
+{{- else -}}keycloak-oidc
+{{- end -}}
+{{- end -}}
+
+{{/*
 Expand the name of the chart.
 */}}
 {{- define "mistral-operator.name" -}}
@@ -524,7 +539,8 @@ Determining whether IDP JWK Secrets should be populated
 */}}
 {{- define "idpSecrets.populate" -}}
 {{- $auth := toString (default false .Values.mistralCommonParams.auth.enable) | lower -}}
-{{- if (eq $auth "true") -}}
+{{- $authType := include "mistral.effectiveAuthType" . -}}
+{{- if and (eq $auth "true") (ne $authType "k8s-sa") -}}
 {{- if and
   (not (empty .Values.secrets.idpClientId))
   (ne  (toString .Values.secrets.idpClientId) "null")

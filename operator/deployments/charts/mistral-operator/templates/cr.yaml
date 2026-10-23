@@ -23,6 +23,7 @@ spec:
       host: {{ .Values.mistral.ingress.host }}
       {{- end}}
     cloudCoreIntegrationEnabled: {{ default "false" .Values.CLOUD_CORE_INTEGRATION_ENABLED }}
+    m2mAuthMode: {{ default "legacy" .Values.M2M_AUTH_MODE }}
     lastUpdate: {{ now }}
     tls:
       enabled: {{ default "false" .Values.mistral.tls.enabled }}
@@ -210,6 +211,10 @@ spec:
       cloudCoreUsername: {{ .Values.mistralCommonParams.auth.cloudCoreUsername }}
       {{- end}}
       projectRules: {{ .Values.mistralCommonParams.auth.projectRules | toJson | quote }}
+      {{- with .Values.mistralCommonParams.auth.k8sSa }}
+      k8sSa:
+        audience: {{ default "netcracker" .audience | quote }}
+      {{- end }}
     dbaas:
       agentUrl: {{ .Values.mistralCommonParams.dbaas.agentUrl }}
       {{- if .Values.mistralCommonParams.dbaas.aggregatorUrl }}

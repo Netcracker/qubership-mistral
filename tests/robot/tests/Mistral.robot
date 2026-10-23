@@ -554,6 +554,21 @@ Webhook notifier returns token
 
     Wait until the execution will has SUCCESS state
 
+Authenticate with M2M_AUTH_MODE as legacy, k8s and hybrid
+    [Tags]  security  m2m-auth
+    Skip if auth is disalbed  ${AUTH_ENABLE}
+    Log To Console    M2M_AUTH_MODE=${M2M_AUTH_MODE} effective AUTH_TYPE=${AUTH_TYPE}
+
+    Get all workflows
+
+Reject default ServiceAccount token in any M2M_AUTH_MODE
+    [Tags]  security  m2m-auth
+    Skip if auth is disalbed  ${AUTH_ENABLE}
+    Skip If  '${AUTH_TYPE}' not in ['k8s-sa', 'hybrid']  Only relevant for k8s-sa and hybrid auth
+
+    ${STATUS}=  Get Workflows Http Status With Default Sa Token
+    Should Be Equal As Integers  ${STATUS}  401
+
 Mistral heartbeat
     [Tags]  basic  heartbeat
 
