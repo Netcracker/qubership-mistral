@@ -16,6 +16,7 @@ import time
 from urllib.parse import quote
 import requests
 from kubernetes import client, config
+from kubernetes.client.exceptions import ApiException
 from robot.api import logger
 from robot.utils import asserts
 
@@ -135,14 +136,38 @@ class KubernetesDisruptionLibrary:
 
     # ========== Kubernetes Pod Operations ==========
 
-    def scale_deployment(self, deployment_name, replicas, namespace=None):
-        """Scale a deployment to specified number of replicas."""
+    def scale_deployment(self, deployment_name, replicas, namespace=None,
+                         max_retries=5, retry_backoff=2):
+        """Scale a deployment to specified number of replicas.
+
+        Retries on HTTP 409 Conflict caused by concurrent writes to the
+        Deployment object.
+        """
         self._ensure_k8s()
         ns = namespace or self._namespace
-        deployment = self._apps_api.read_namespaced_deployment(deployment_name, ns)
-        deployment.spec.replicas = int(replicas)
-        self._apps_api.patch_namespaced_deployment(deployment_name, ns, deployment)
-        logger.info(f"Scaled deployment {deployment_name} to {replicas} replicas")
+        replicas = int(replicas)
+        body = client.V1Scale(
+            spec=client.V1ScaleSpec(replicas=replicas)
+        )
+
+        for attempt in range(max_retries):
+            try:
+                self._apps_api.patch_namespaced_deployment_scale(
+                    deployment_name, ns, body
+                )
+                logger.info(
+                    f"Scaled deployment {deployment_name} to {replicas} replicas"
+                )
+                return
+            except ApiException as e:
+                if e.status == 409 and attempt < max_retries - 1:
+                    logger.info(
+                        f"Conflict scaling {deployment_name} to {replicas} "
+                        f"replicas (attempt {attempt + 1}/{max_retries}), retrying..."
+                    )
+                    time.sleep(retry_backoff)
+                    continue
+                raise
 
     def delete_pods_for_deployment(self, deployment_name, namespace=None, grace_period=0):
         """Force-delete all pods for a deployment (simulates crash)."""
@@ -204,18 +229,43 @@ class KubernetesDisruptionLibrary:
         asserts.fail(f"Deployment {deployment_name} did not complete rollout to "
                      f"{expected_replicas} replicas within {timeout}s")
 
-    def restart_deployment(self, deployment_name, namespace=None):
-        """Trigger rolling restart by patching pod template annotation."""
+    def restart_deployment(self, deployment_name, namespace=None,
+                           max_retries=5, retry_backoff=2):
+        """Trigger rolling restart by patching pod template annotation.
+
+        Retries on HTTP 409 Conflict caused by concurrent writes to the
+        Deployment object.
+        """
         self._ensure_k8s()
         ns = namespace or self._namespace
-        deployment = self._apps_api.read_namespaced_deployment(deployment_name, ns)
+        body = {
+            "spec": {
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "restartedAt": str(time.time())
+                        }
+                    }
+                }
+            }
+        }
 
-        if deployment.spec.template.metadata.annotations is None:
-            deployment.spec.template.metadata.annotations = {}
-
-        deployment.spec.template.metadata.annotations['restartedAt'] = str(time.time())
-        self._apps_api.patch_namespaced_deployment(deployment_name, ns, deployment)
-        logger.info(f"Triggered rolling restart of {deployment_name}")
+        for attempt in range(max_retries):
+            try:
+                self._apps_api.patch_namespaced_deployment(
+                    deployment_name, ns, body
+                )
+                logger.info(f"Triggered rolling restart of {deployment_name}")
+                return
+            except ApiException as e:
+                if e.status == 409 and attempt < max_retries - 1:
+                    logger.info(
+                        f"Conflict restarting {deployment_name} "
+                        f"(attempt {attempt + 1}/{max_retries}), retrying..."
+                    )
+                    time.sleep(retry_backoff)
+                    continue
+                raise
 
     def get_configmap_value(self, configmap_name, key, namespace=None):
         """Return the current string value of a single key in a ConfigMap."""
