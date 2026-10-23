@@ -334,8 +334,8 @@ The Mistral Authentication parameters used for the configurations are specified 
 |Parameter   |Type  |Mandatory|Default value|Description                                                        |
 |------------|------|---------|-------------|-------------------------------------------------------------------|
 |mistralCommonParams.auth.enable|bool|no|'False'|This parameter specifies whether authentication is enabled.|
-|mistralCommonParams.auth.type|string|no|'keycloak-oidc'|This parameter specifies the authentication type. Valid values: `keycloak-oidc`, `k8s-sa`, `keystone`, `mitreid` (k8s-sa with keycloak-oidc fallback).|
-|M2M_AUTH_MODE|string|no|'legacy'|M2M authentication mode, referring it the operator resolves into the effective `auth.type` before the Mistral services start. Valid values: `legacy`, `hybrid`, `k8s`. Takes precedence over `auth.type`. See [M2M Authentication Mode](#m2m-authentication-mode).|
+|mistralCommonParams.auth.type|string|no|'keycloak-oidc'|This parameter specifies the authentication type. Valid values: `keycloak-oidc`, `k8s-sa`, `keystone`, `mitreid`.|
+|M2M_AUTH_MODE|string|no|'legacy'|M2M authentication mode. The operator resolves it into the effective `auth.type` before the Mistral services start. Valid values: `legacy`, `hybrid`, `k8s`. Takes precedence over `auth.type`. See [M2M Authentication Mode](#m2m-authentication-mode).|
 |mistralCommonParams.auth.k8sSa.audience|string|no|'netcracker'|Audience (`aud`) required in inbound ServiceAccount tokens. Used when M2M_AUTH_MODE is k8s|
 |mistralCommonParams.auth.certs|string|no|''|This parameter specifies the certificate to verify idpExternalServer.|
 |mistralCommonParams.auth.projectRules|list|no|`[{"type":"extract","field":"iss","pattern":"*/realms/{value}"}]`|This parameter specifies the rules for resolving the project ID from token claims. For more information, see [Project ID Resolution](#project-id-resolution).|
@@ -344,10 +344,26 @@ The Mistral Authentication parameters used for the configurations are specified 
 |mistralCommonParams.idpExternalServer|string|no|''|This parameter specifies the IDP external server.|
 |mistralCommonParams.idpUserPrecreated|bool|no|'False'|This parameter specifies whether Mistral should use a precreated user with credentials stored in a specific secret, `idp-precreated-user`, with the `idp-client-id` and `idp-client-secret` fields.|
 |secrets.idpRegistrationToken|string|no|'null'|This parameter specifies the IDP registration token.|
-|secrets.idpClientId|string|no|'null'|This parameter specifies the IDP client ID.|
-|secrets.idpClientSecret|string|no|'null'|This parameter specifies the IDP client secret.|
+|secrets.idpClientId|string|no|'null'|This parameter specifies the IDP client ID. Used when Cloud Core integration is disabled and no precreated IDP user is configured; see [IDP Client Credentials](#idp-client-credentials).|
+|secrets.idpClientSecret|string|no|'null'|This parameter specifies the IDP client secret. Used when Cloud Core integration is disabled and no precreated IDP user is configured; see [IDP Client Credentials](#idp-client-credentials).|
 |secrets.idpJwkExp|string|no|'null'|This parameter specifies IDP JWK exp.|
 |secrets.idpJwkMod|string|no|'null'|This parameter specifies IDP JWK mod.|
+
+## IDP Client Credentials
+
+Mistral uses OAuth2 client credentials for **outbound machine-to-machine authentication** — for example, to fetch an access token from the IDP before calling another service.
+
+The credentials can come from one of three sources, checked in the following order:
+
+| Source | Secret name | Keys | How it is selected |
+|---|---|---|---|
+| Cloud Core integration secret | `mistral-client-credentials` | `username`, `password` | `mistral.cloudCoreIntegrationEnabled: true` and the effective auth type is not `k8s-sa` |
+| Precreated user secret | `idp-precreated-user` | `idp-client-id`, `idp-client-secret` | `mistralCommonParams.idpUserPrecreated: true` and Cloud Core integration is disabled |
+| Helm values | `mistral-secret` | `idp-client-id`, `idp-client-secret` | Default when auth is enabled, the effective auth type is not `k8s-sa`, and neither of the above is configured |
+
+The operator sets the `IDP_CREDS_SOURCE` environment variable to `cloudcore`, `precreated`, or `mistral-secret` accordingly. The Mistral startup script reads the corresponding secret and exports `IDP_CLIENT_ID` / `IDP_CLIENT_SECRET`.
+
+> **Note:** In pure `k8s-sa` mode (`M2M_AUTH_MODE: k8s` or `auth.type: k8s-sa`), the `mistral-client-credentials` Cloud Core secret volume is **not mounted** as outbound machine-to-machine calls use the projected ServiceAccount token instead of OAuth2 client credentials. See [Projected ServiceAccount Token](#projected-serviceaccount-token).
 
 ## Project ID Resolution
 
@@ -473,7 +489,7 @@ The `projectRules` example above maps the ServiceAccount's namespace directly to
 the Mistral project ID. Adjust the rules to match your project ID scheme — see
 [Project ID Resolution](#project-id-resolution) for details.
 
-> **Note:** M2M_AUTH_MODE ultimately decides the effective authentication type.See [M2M Authentication Mode](#m2m-authentication-mode).
+> **Note:** M2M_AUTH_MODE ultimately decides the effective authentication type. See [M2M Authentication Mode](#m2m-authentication-mode).
 
 ### Authorization scope
 
@@ -488,9 +504,33 @@ token, scoped to the project ID resolved from that token's claims.
 > implementing a ServiceAccount-name-to-role mapping (e.g. mapping specific SA
 > names or groups to `admin`/`member` roles) in the `K8sSAAuthHandler`.
 
+### Projected ServiceAccount Token
+
+When the effective authentication type is `k8s-sa` or `hybrid`, the operator mounts a projected ServiceAccount token into **every** Mistral pod (API, Engine, Executor, Notifier, and Monitoring). The token is used as the Bearer access token for outbound machine-to-machine calls.
+
+| Property | Default | Description |
+|---|---|---|
+| Volume name | `k8s-sa-audience-token` | Projected volume added to the pod |
+| Audience | `netcracker` | Configurable via `mistralCommonParams.auth.k8sSa.audience` |
+| Mount path | `/var/run/secrets/tokens/<audience>/token` | Token file location inside the container |
+|
+
+The default audience is `netcracker`. To use a custom audience:
+
+```yaml
+mistralCommonParams:
+  auth:
+    k8sSa:
+      audience: my-audience
+```
+
+The token is then available at `/var/run/secrets/tokens/my-audience/token`.
+
 ## M2M Authentication Mode
 
 `M2M_AUTH_MODE` is a top-level Helm parameter that provides a single control for machine-to-machine authentication. When set, the operator resolves it into the effective `auth.type`.
+
+> **Note:** If `M2M_AUTH_MODE` is empty, the operator uses `mistralCommonParams.auth.type`. If it is set to an unrecognized value, the operator logs a warning and falls back to `legacy` mode instead of failing reconciliation.
 
 | Mode | Inbound validation |
 |------|--------------------|
@@ -520,11 +560,11 @@ mistralCommonParams:
     enable: true
 ```
 
-> **Note:** `hybrid` requires access to the cluster's OIDC discovery / JWKS endpoints (granted to all authenticated ServiceAccounts by the built-in `system:service-account-issuer-discovery` ClusterRole) and the Keycloak OAuth2 credentials (`secrets.idpClientId`, `secrets.idpClientSecret`).
+> **Note:** `hybrid` requires access to the cluster's OIDC discovery / JWKS endpoints (granted to all authenticated ServiceAccounts by the built-in `system:service-account-issuer-discovery` ClusterRole). When it falls back to Keycloak for inbound validation, it uses the credentials described in [IDP Client Credentials](#idp-client-credentials).
 
 ### `k8s`
 
-All tokens are validated against the cluster's JWKS.  Equivalent to setting `auth.type: k8s-sa`.
+All tokens are validated against the cluster's JWKS. Equivalent to setting `auth.type: k8s-sa`.
 
 ```yaml
 M2M_AUTH_MODE: k8s

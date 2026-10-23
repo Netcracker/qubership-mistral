@@ -1,6 +1,7 @@
 {{/* vim: set filetype=mustache: */}}
 {{/*
 Resolve the effective auth type from M2M_AUTH_MODE (if set) or auth.type.
+An unrecognized M2M_AUTH_MODE value falls back to legacy mode.
 */}}
 {{- define "mistral.effectiveAuthType" -}}
 {{- $m2mMode := default "" .Values.M2M_AUTH_MODE | lower -}}
@@ -8,7 +9,8 @@ Resolve the effective auth type from M2M_AUTH_MODE (if set) or auth.type.
 {{- if eq $m2mMode "legacy" -}}keycloak-oidc
 {{- else if eq $m2mMode "k8s" -}}k8s-sa
 {{- else if eq $m2mMode "hybrid" -}}hybrid
-{{- else -}}{{ $authType }}
+{{- else if eq $m2mMode "" -}}{{ $authType }}
+{{- else -}}keycloak-oidc
 {{- end -}}
 {{- end -}}
 

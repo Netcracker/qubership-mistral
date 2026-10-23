@@ -1721,7 +1721,8 @@ class KubernetesHelper:
         """Return the resolved auth type, applying m2mAuthMode override if set.
 
         The operator is the only place where M2M_AUTH_MODE is resolved; the
-        application only receives the result as ``auth_type``.
+        application only receives the result as ``auth_type``. An unrecognized
+        value falls back to ``legacy`` rather than failing reconciliation.
         """
         _M2M_MODE_TO_AUTH_TYPE = {
             'legacy': 'keycloak-oidc',
@@ -1729,9 +1730,16 @@ class KubernetesHelper:
             'hybrid': 'hybrid',
         }
         m2m_mode = self.get_m2m_auth_mode()
-        if m2m_mode:
-            return _M2M_MODE_TO_AUTH_TYPE.get(m2m_mode, self.get_auth_type())
-        return self.get_auth_type()
+        if not m2m_mode:
+            return self.get_auth_type()
+        if m2m_mode not in _M2M_MODE_TO_AUTH_TYPE:
+            logger.warning(
+                f"Invalid M2M_AUTH_MODE '{m2m_mode}'. "
+                f"Falling back to 'legacy'. "
+                f"Valid values are: {', '.join(_M2M_MODE_TO_AUTH_TYPE)}."
+            )
+            return _M2M_MODE_TO_AUTH_TYPE['legacy']
+        return _M2M_MODE_TO_AUTH_TYPE[m2m_mode]
 
     def is_cloud_core_integration_enabled(self):
         return self._spec['mistral']['cloudCoreIntegrationEnabled']

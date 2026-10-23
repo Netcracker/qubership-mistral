@@ -30,10 +30,15 @@ def _helper(m2m_mode='', auth_type='keycloak-oidc', auth_enable=True,
     ('k8s', 'keycloak-oidc', 'k8s-sa'),
     ('K8S', 'keycloak-oidc', 'k8s-sa'),
     ('', 'mitreid', 'mitreid'),
-    ('unknown', 'keycloak-oidc', 'keycloak-oidc'),
 ])
 def test_effective_auth_type(mode, auth_type, expected):
     assert _helper(mode, auth_type).get_effective_auth_type() == expected
+
+
+@pytest.mark.parametrize('mode', ['unknown', 'not-a-mode', 'k8s-sa'])
+def test_invalid_m2m_auth_mode_falls_back_to_legacy(mode):
+    """An unrecognized M2M_AUTH_MODE value falls back to legacy mode."""
+    assert _helper(mode).get_effective_auth_type() == 'keycloak-oidc'
 
 
 @pytest.mark.parametrize('mode,enabled,expected', [
