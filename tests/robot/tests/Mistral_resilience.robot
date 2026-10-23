@@ -42,10 +42,12 @@ Common Test Teardown
     Take off refuses
 
 Restore All Deployments
+    Scale Deployment  ${API_DEPLOYMENT}       replicas=1
     Scale Deployment  ${ENGINE_DEPLOYMENT}   replicas=1
     Scale Deployment  ${EXECUTOR_DEPLOYMENT}  replicas=1
     Scale Deployment  ${NOTIFIER_DEPLOYMENT}  replicas=1
     Scale Deployment  ${MONITORING_DEPLOYMENT}  replicas=1
+    Wait Pods Ready  ${API_DEPLOYMENT}       expected_replicas=1  timeout=${SCALE_WAIT_TIMEOUT}
     Wait Pods Ready  ${ENGINE_DEPLOYMENT}    expected_replicas=1  timeout=${SCALE_WAIT_TIMEOUT}
     Wait Pods Ready  ${EXECUTOR_DEPLOYMENT}  expected_replicas=1  timeout=${SCALE_WAIT_TIMEOUT}
     Wait Pods Ready  ${NOTIFIER_DEPLOYMENT}  expected_replicas=1  timeout=${SCALE_WAIT_TIMEOUT}
