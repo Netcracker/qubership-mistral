@@ -47,11 +47,9 @@ fi
 
 
 echo "Start deleting RabbitMQ vhost"
-MISTRAL_TLS_ENABLED="${MISTRAL_TLS_ENABLED:-false}"
 RABBITMQ_TLS_ENABLED="${RABBITMQ_TLS_ENABLED:-false}"
 
-if { [ "$MISTRAL_TLS_ENABLED" = "true" ] || [ "$MISTRAL_TLS_ENABLED" = "True" ]; } \
-   && { [ "$RABBITMQ_TLS_ENABLED" = "true" ] || [ "$RABBITMQ_TLS_ENABLED" = "True" ]; }; then
+if [ "$RABBITMQ_TLS_ENABLED" = "true" ] || [ "$RABBITMQ_TLS_ENABLED" = "True" ]; then
   echo "Using TLS RabbitMQ management API"
 
   response=$(curl -k \
