@@ -200,36 +200,18 @@ The following steps should be done in the RabbitMQ pod:
 
 First, before cleaning the queue, you need to check that there are no unacked messages.
 
-You can check this on the RabbitMQ's user interface in the **Channels** tab:
-
-![Channels List](/custom_doc/img/rabbitmq_channels.png)
+You can check this on the RabbitMQ's user interface in the **Channels** tab. Open the RabbitMQ Management UI, navigate to the **Channels** tab, and look for channels that have a non-zero value in the **Unacked** column.
 
 * If you have some, you need to close the connection associated with this channel, so all unacked messages will be returned to the queue.
-* Check the name of the channel with these unacked messages through RabbitMQ's user interface:
-
-![Channel](/custom_doc/img/rabbitmq_channel.png)
-
-* Get pid of these connection via terminal: `# rabbitmqctl list_connections pid name`. For example:
-
-![Connections List](/custom_doc/img/rabbitmq_list_connections.png)
-
-* Remove this connection via terminal: `# rabbitmqctl close_connection '<YOUR_CONNECTION_PID>' 'STR_EXPLANATION'`. For example:
-
-![Remove Connection](/custom_doc/img/rabbitmq_close_connection.png)
+* Check the name of the channel with these unacked messages through RabbitMQ's user interface: open the channel details and note the **Channel name** or **Connection** value.
+* Get pid of these connection via terminal: `# rabbitmqctl list_connections pid name`. For example, run this command on the RabbitMQ node and find the row whose `name` matches the connection you identified.
+* Remove this connection via terminal: `# rabbitmqctl close_connection '<YOUR_CONNECTION_PID>' 'STR_EXPLANATION'`. For example, replace `<YOUR_CONNECTION_PID>` with the `pid` value from the previous step.
 
 Second, remove all the messages from your queues with lots of messages:
 
-* Check the name of the queue that collects a lot of messages in RabbitMQ's UI in the **Queues** tab:
-
-![Queues List](/custom_doc/img/rabbitmq_queues.png)
-
-* Purge this queue via terminal: `# rabbitmqctl purge_queue [-p VHOST] 'QUEUE_NAME'`. For example:
-
-![Purge Queue](/custom_doc/img/rabbitmq_purge_queue.png)
-
-* Check that all the messages were successfully deleted:
-
-![After Purge](/custom_doc/img/rabbitmq_after_purge.png)
+* Check the name of the queue that collects a lot of messages in RabbitMQ's UI in the **Queues** tab. Open the RabbitMQ Management UI, go to the **Queues** tab, and identify the queue with a large number in the **Messages** column (for example, `mistral_engine` or another Mistral-related queue).
+* Purge this queue via terminal: `# rabbitmqctl purge_queue [-p VHOST] 'QUEUE_NAME'`. For example, if the queue is in the default vhost, you can omit `-p VHOST`.
+* Check that all the messages were successfully deleted by returning to the RabbitMQ Management UI **Queues** tab. The queue you purged should now show **0** in the **Messages** column.
 
 #### Limit Message Count
 
