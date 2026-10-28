@@ -13,6 +13,7 @@
 * [Mistral Service was not Deployed](#mistral-service-was-not-deployed)
 * [Request on Execution Creation is Stuck](#request-on-execution-creation-is-stuck)
 * [Different IDP Tenants](#different-idp-tenants)
+* [K8s M2M Authentication Failures](#k8s-M2M-authentication-failures)
 * [RabbitMQ Collects a Lot of Messages](#rabbitmq-collects-a-lot-of-messages)
 * [Mistral Cannot Deploy Because of Active Connections to DB](#mistral-cannot-deploy-because-of-active-connections-to-db)
 * [How to Clean Mistral Database](#how-to-clean-mistral-database)
@@ -182,6 +183,102 @@ If `project_id` differs from `tenant-id`, then there are two possible situations
 
 When Mistral security is switched on using the `AUTH_ENABLE=True` parameter, Mistral enables multitenancy. It is the reason
 why you cannot access the specific Mistral entities using the different tenants.
+
+## K8s M2M Authentication Failures
+
+Applies when `M2M_AUTH_MODE: k8s` or `M2M_AUTH_MODE: hybrid`.
+
+### Missing or Invalid Authorization Header
+
+* **Symptom:** API returns `HTTP 401 Unauthorized`. The client did not send a token, the header is malformed, or it does not match `Bearer <token>`.
+* **Log message:**
+  ```
+  There is no token in headers(X-Auth-Token,Authorization)
+  Does not match pattern ^\w+\s(.*)$
+  ```
+* **Check:** Inspect the request headers. Mistral accepts `Authorization: Bearer <token>` or `X-Auth-Token: <token>`.
+* **Resolution:** Provide a valid token in one of the supported headers.
+
+### K8s ServiceAccount Token with Wrong Audience
+
+* **Symptom:** API returns `HTTP 401 Unauthorized` if the token is supplied with different audience than the Mistral configured audience.
+* **Log message:**
+  ```
+  Invalid K8s SA token
+  Failed to validate access token
+  ```
+  (the underlying verifier error explains that the `aud` claim does not contain the configured audience).
+* **Check:** Compare the audience claim in token with configured audience (`k8s-sa-audience` in mistral-common-params cm) claim.
+
+* **Resolution:** Use ServiceAccount token with the correct audience (default is `netcracker`).
+
+### Expired, Tampered or Garbage Token
+
+* **Symptom:** API returns `HTTP 401 Unauthorized`.
+* **Log message:**
+  ```
+  Invalid K8s SA token
+  Failed to validate access token
+  K8s token authentication failed: <details>
+  ```
+* **Check:**
+  * Decode the token and check `exp`. If it is in the past, the token has expired.
+  * If the token was modified or is random text, signature verification fails.
+  * For Keycloak OIDC tokens in `k8s` mode, the K8s SA handler rejects them.
+* **Resolution:**
+  * Request a fresh projected token (Kubernetes rotates them automatically; if you build one manually, set a future `exp`).
+  * Do not modify the token after retrieval.
+  * Ensure the token type matches the Mistral auth mode (see [Mode Mismatch](#mode-mismatch-between-caller-and-mistral)).
+
+### Missing Projected ServiceAccount Token File
+
+* **Symptom:** In `k8s` or `hybrid` mode, outbound machine-to-machine calls from Mistral fail because Mistral cannot read its own projected ServiceAccount token.
+* **Log message:**
+  ```
+  Failed to read projected Kubernetes ServiceAccount token from /var/run/secrets/tokens/<audience>/token: [Errno 2] No such file or directory
+  Kubernetes ServiceAccount token is not available
+  ```
+* **Check:** Verify the projected volume is present on the pod (Executor pod for http actions and Notifier for webhook notifications) that makes the outbound call at /var/run/secrets/tokens/<audience>/
+
+* **Resolution:** The operator mounts this volume automatically when `M2M_AUTH_MODE` is `k8s` or `hybrid`. If it is missing, confirm the mode in the `MistralService` CR and redeploy. The projected token path is `/var/run/secrets/tokens/<audience>/token`.
+
+### OIDC Discovery / JWKS Endpoint Unavailable
+
+* **Symptom:** Intermittent `HTTP 401 Unauthorized` or slow authentication. First authentication after pod start fails.
+* **Log message:** Retries while fetching the JWKS or discovery document from the Kubernetes issuer, for example connection errors to `https://<issuer>/.well-known/openid-configuration`.
+* **Check:**
+  * From a Mistral API pod, test connectivity to the issuer and JWKS endpoints.
+  * Check whether the cluster OIDC issuer is reachable from the pod network. GKE clusters use anonymous discovery; other clusters may require the cluster CA.
+* **Resolution:** Ensure the pod can reach the Kubernetes API / OIDC issuer. If the issuer is not resolvable, fix DNS or network policies. The verifier caches keys, so a transient failure usually recovers once discovery succeeds.
+
+### Mode Mismatch Between Caller and Mistral
+
+* **Symptom:** API returns `HTTP 401 Unauthorized`.
+  * An IDP/Keycloak token is sent to a Mistral running in pure `k8s` mode.
+  * A K8s ServiceAccount token is sent to a Mistral running in pure `legacy` mode.
+* **Log message:**
+  ```
+  Invalid K8s SA token
+  Failed to validate access token
+  ```
+* **Check:**
+  * Determine the effective auth mode in the running Mistral: check auth-type in mistral-common-params cm.
+  * Also check the Helm-level setting that drives it: check value of M2M_AUTH_MODE in mistralservice cr.
+
+* **Resolution:** Align the caller token type with the Mistral mode:
+  * `M2M_AUTH_MODE: legacy`  → use Keycloak tokens.
+  * `M2M_AUTH_MODE: k8s`  → use K8s SA tokens with the configured audience.
+  * `M2M_AUTH_MODE: hybrid` → both token types are accepted.
+
+### Invalid M2M_AUTH_MODE Value
+
+* **Symptom:** The expected `k8s` or `hybrid` mode is not active; auth behaves as `legacy` without an obvious error in the Mistral service logs.
+* **Log message:** In the operator logs:
+  ```
+  Invalid M2M_AUTH_MODE '<value>'. Falling back to legacy mode.
+  ```
+* **Check:** M2M_AUTH_MODE value in mistralservice cr. Valid values are `legacy`, `k8s`, and `hybrid`.
+* **Resolution:** Set `M2M_AUTH_MODE` to one of the supported values in the Helm values and redeploy. Do not rely on arbitrary values, because the operator silently falls back to `legacy`.
 
 ## RabbitMQ Collects a Lot of Messages
 
