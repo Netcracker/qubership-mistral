@@ -37,6 +37,11 @@ mistral:
 It is possible to partially disable TLS for each service.
 For Postgres, it is possible to specify ssl mode. More information, refer to the _Official Postgres_ documentation at [https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION](https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION).
 
+### Externally managed PostgreSQL (AWS RDS, Azure, GCP)
+
+Managed PostgreSQL servers do not use the platform issued certificates. When `sslmode` is **not** `verify-ca` or `verify-full`, Mistral automatically unsets `PGSSLROOTCERT`, `PGSSLCERT` and `PGSSLKEY` at container start if PostgreSQL is detected as externally managed.
+**Limitation:** `verify-ca` and `verify-full` are not yet supported for externally managed PostgreSQL. In these modes the certificates are always kept and the server certificate is verified against the CA in `ca.crt`, so the connection to a managed PostgreSQL (for example AWS RDS) fails verification. For an externally managed PostgreSQL use a different `sslmode`, such as `require`.
+
 Minimal parameters to enable TLS are:
 ```yaml
 mistral:
@@ -51,7 +56,7 @@ mistral:
 
 ## SSL Configuration using Parameters with Manually Generated Certificates
 
-You can automatically generate TLS-based secrets using Helm by specifying certificates in deployment parameters. 
+You can automatically generate TLS-based secrets using Helm by specifying certificates in deployment parameters.
 
 For example, to generate `mistral-tls-secret`:
 

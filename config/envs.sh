@@ -14,6 +14,23 @@ unset_if_empty HTTP_PROXY
 unset_if_empty HTTPS_PROXY
 unset_if_empty NO_PROXY
 
+# Do not use internal certificates for externally managed PostgreSQL
+function unset_pg_ssl_certs_if_external_pg {
+    case "${PGSSLMODE:-require}" in
+        verify-ca|verify-full) return 0 ;;
+    esac
+
+    local detected
+    detected="$(python3 "$(dirname "${BASH_SOURCE[0]}")/pg_ssl_detect.py" 2>/dev/null)" || return 0
+
+    if [ "${detected}" = "external" ]; then
+        echo "PostgreSQL ${PG_HOST} detected as externally managed and sslmode is '${PGSSLMODE:-require}': unsetting PGSSLROOTCERT, PGSSLCERT, PGSSLKEY"
+        unset PGSSLROOTCERT PGSSLCERT PGSSLKEY
+    fi
+}
+
+unset_pg_ssl_certs_if_external_pg
+
 export K8S_SA_AUDIENCE="${K8S_SA_AUDIENCE:-netcracker}"
 
 ENGINE_TOPIC="${QUEUE_NAME_PREFIX}_mistral_engine"
