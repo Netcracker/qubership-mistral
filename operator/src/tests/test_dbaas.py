@@ -7,9 +7,17 @@ import requests
 from unittest.mock import MagicMock, patch
 
 from dbaas_helper import DBaaSHelper
+from pg_connection import PgConnectionInfo
 
 NAMESPACE = "test-ns"
 BASE_URL = "http://dbaas-aggregator:8080"
+PG = PgConnectionInfo(
+    host='my-pg',
+    port='5432',
+    db_name='mistral',
+    user='db_user',
+    password='db_pw',
+)
 
 
 @pytest.fixture
@@ -76,16 +84,16 @@ def test_create_db_raises_on_error(mock_put, helper):
 @patch('dbaas_helper.requests.put')
 def test_register_external_db_sends_full_connection_details(mock_put, helper):
     mock_put.return_value = _resp(200, {})
-    helper.register_external_db('my-pg', 5432, 'mistral', 'db_user', 'db_pw')
+    helper.register_external_db(PG)
 
     body = mock_put.call_args[1]['json']
     cp = body['connectionProperties'][0]
 
-    assert cp['host'] == 'my-pg'
-    assert cp['port'] == '5432'
-    assert cp['name'] == 'mistral'
-    assert cp['username'] == 'db_user'
-    assert cp['password'] == 'db_pw'
+    assert cp['host'] == PG.host
+    assert cp['port'] == PG.port
+    assert cp['name'] == PG.db_name
+    assert cp['username'] == PG.user
+    assert cp['password'] == PG.password
     assert body['type'] == 'postgresql'
     assert body['classifier']['microserviceName'] == 'mistral-operator'
     assert body['classifier']['namespace'] == NAMESPACE
@@ -94,7 +102,7 @@ def test_register_external_db_sends_full_connection_details(mock_put, helper):
 @patch('dbaas_helper.requests.put')
 def test_migrate_external_sends_list_with_classifier(mock_put, helper):
     mock_put.return_value = _resp(200)
-    helper.migrate_external_to_internal('pg', 5432, 'db', 'u', 'pw')
+    helper.migrate_external_to_internal(PG)
     body = mock_put.call_args[1]['json']
     assert isinstance(body, list) and len(body) == 1
     assert body[0]['namespace'] == NAMESPACE
@@ -105,4 +113,4 @@ def test_migrate_external_sends_list_with_classifier(mock_put, helper):
 def test_migrate_external_raises_on_error(mock_put, helper):
     mock_put.return_value = _resp(500, raise_err=requests.HTTPError("500"))
     with pytest.raises(requests.HTTPError):
-        helper.migrate_external_to_internal('pg', 5432, 'db', 'u', 'pw')
+        helper.migrate_external_to_internal(PG)
