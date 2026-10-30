@@ -14,6 +14,48 @@ unset_if_empty HTTP_PROXY
 unset_if_empty HTTPS_PROXY
 unset_if_empty NO_PROXY
 
+# Do not use internal certificates for externally managed PostgreSQL
+function unset_pg_ssl_certs_if_external_pg {
+    case "${PGSSLMODE:-require}" in
+        verify-ca|verify-full) return 0 ;;
+    esac
+
+    local detected
+    detected="$(python3 "$(dirname "${BASH_SOURCE[0]}")/pg_ssl_detect.py" 2>/dev/null)" || return 0
+
+    if [ "${detected}" = "external" ]; then
+        echo "PostgreSQL ${PG_HOST} detected as externally managed and sslmode is '${PGSSLMODE:-require}': unsetting PGSSLROOTCERT, PGSSLCERT, PGSSLKEY"
+        unset PGSSLROOTCERT PGSSLCERT PGSSLKEY
+    fi
+}
+
+unset_pg_ssl_certs_if_external_pg
+
+# Do not use internal certificates for externally managed RabbitMQ.
+export RABBITMQ_SSL_KEY_FILE="${RABBITMQ_SSL_KEY_FILE-/opt/mistral/mount_configs/tls/tls.key}"
+export RABBITMQ_SSL_CERT_FILE="${RABBITMQ_SSL_CERT_FILE-/opt/mistral/mount_configs/tls/tls.crt}"
+export RABBITMQ_SSL_CA_FILE="${RABBITMQ_SSL_CA_FILE-/opt/mistral/mount_configs/tls/ca.crt}"
+
+function unset_rabbitmq_ssl_certs_if_external_rmq {
+    local rmq_tls_enabled="${RABBITMQ_TLS_ENABLED:-false}"
+    rmq_tls_enabled="${rmq_tls_enabled,,}"
+    if [ "${rmq_tls_enabled}" != "true" ]; then
+        return 0
+    fi
+
+    local detected
+    detected="$(python3 "$(dirname "${BASH_SOURCE[0]}")/rmq_ssl_detect.py" 2>/dev/null)" || return 0
+
+    if [ "${detected}" = "external" ]; then
+        echo "RabbitMQ ${RABBIT_HOST} detected as externally managed: unsetting ssl_key_file, ssl_cert_file, ssl_ca_file"
+        export RABBITMQ_SSL_KEY_FILE=""
+        export RABBITMQ_SSL_CERT_FILE=""
+        export RABBITMQ_SSL_CA_FILE=""
+    fi
+}
+
+unset_rabbitmq_ssl_certs_if_external_rmq
+
 export K8S_SA_AUDIENCE="${K8S_SA_AUDIENCE:-netcracker}"
 
 ENGINE_TOPIC="${QUEUE_NAME_PREFIX}_mistral_engine"

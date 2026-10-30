@@ -37,6 +37,16 @@ mistral:
 It is possible to partially disable TLS for each service.
 For Postgres, it is possible to specify ssl mode. More information, refer to the _Official Postgres_ documentation at [https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION](https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION).
 
+### Externally managed PostgreSQL (AWS RDS, Azure, GCP)
+
+Managed PostgreSQL servers do not use the platform issued certificates. When `sslmode` is **not** `verify-ca` or `verify-full`, Mistral automatically unsets `PGSSLROOTCERT`, `PGSSLCERT` and `PGSSLKEY` at container start if PostgreSQL is detected as externally managed.
+**Limitation:** `verify-ca` and `verify-full` are not yet supported for externally managed PostgreSQL. In these modes the certificates are always kept and the server certificate is verified against the CA in `ca.crt`, so the connection to a managed PostgreSQL (for example AWS RDS) fails verification. For an externally managed PostgreSQL use a different `sslmode`, such as `require`.
+
+### Externally managed RabbitMQ (Amazon MQ, Azure Service Bus, CloudAMQP)
+
+Managed RabbitMQ brokers do not use the platform issued certificates. When `RABBITMQ_TLS_ENABLED` is `true`, Mistral automatically unsets `ssl_key_file`, `ssl_cert_file` and `ssl_ca_file` in the `[oslo_messaging_rabbit]` section at container start if RabbitMQ is detected as externally managed. To force or disable the detection, set `RABBITMQ_EXTERNALLY_MANAGED` to `true` or `false`. Set it to `true` if the CA of the managed broker is already part of `ca.crt`, because the detection by certificate chain does not work in that case.
+**Limitation:** For an externally managed RabbitMQ the connection stays encrypted, but no client certificate is sent and the broker certificate is not verified, similar to PostgreSQL `sslmode=require`. Verification of the broker certificate against `ca.crt` is not supported.
+
 Minimal parameters to enable TLS are:
 ```yaml
 mistral:
@@ -51,7 +61,7 @@ mistral:
 
 ## SSL Configuration using Parameters with Manually Generated Certificates
 
-You can automatically generate TLS-based secrets using Helm by specifying certificates in deployment parameters. 
+You can automatically generate TLS-based secrets using Helm by specifying certificates in deployment parameters.
 
 For example, to generate `mistral-tls-secret`:
 
