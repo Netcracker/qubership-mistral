@@ -13,10 +13,18 @@
 * [Mistral Service was not Deployed](#mistral-service-was-not-deployed)
 * [Request on Execution Creation is Stuck](#request-on-execution-creation-is-stuck)
 * [Different IDP Tenants](#different-idp-tenants)
+* [K8s M2M: Missing or Invalid Authorization Header](#k8s-m2m-missing-or-invalid-authorization-header)
+* [K8s M2M: ServiceAccount Token with Wrong Audience](#k8s-m2m-serviceaccount-token-with-wrong-audience)
+* [K8s M2M: Expired, Tampered or Garbage Token](#k8s-m2m-expired-tampered-or-garbage-token)
+* [K8s M2M: Missing Projected ServiceAccount Token File](#k8s-m2m-missing-projected-serviceaccount-token-file)
+* [K8s M2M: OIDC Discovery / JWKS Endpoint Unavailable](#k8s-m2m-oidc-discovery--jwks-endpoint-unavailable)
+* [K8s M2M: Mode Mismatch Between Caller and Mistral](#k8s-m2m-mode-mismatch-between-caller-and-mistral)
+* [K8s M2M: Invalid M2M_AUTH_MODE Value](#k8s-m2m-invalid-m2m_auth_mode-value)
 * [RabbitMQ Collects a Lot of Messages](#rabbitmq-collects-a-lot-of-messages)
 * [Mistral Cannot Deploy Because of Active Connections to DB](#mistral-cannot-deploy-because-of-active-connections-to-db)
 * [How to Clean Mistral Database](#how-to-clean-mistral-database)
 * [Monitoring Alarms Description](#monitoring-alarms-description)
+* [Expected Error: InvalidCatalogNameError on Initial Startup of Bluegreen Agent](#expected-error-invalidcatalognameerror-on-initial-startup-of-bluegreen-agent)
 
 
 ## Mistral tasks stuck in processing
@@ -183,6 +191,110 @@ If `project_id` differs from `tenant-id`, then there are two possible situations
 When Mistral security is switched on using the `AUTH_ENABLE=True` parameter, Mistral enables multitenancy. It is the reason
 why you cannot access the specific Mistral entities using the different tenants.
 
+## K8s M2M: Missing or Invalid Authorization Header
+
+Applies when `M2M_AUTH_MODE: k8s` or `M2M_AUTH_MODE: hybrid`.
+
+* **Symptom:** API returns `HTTP 401 Unauthorized`. The client did not send a token, the header is malformed, or it does not match `Bearer <token>`.
+* **Log message:**
+  ```
+  There is no token in headers(X-Auth-Token,Authorization)
+  Does not match pattern ^\w+\s(.*)$
+  ```
+* **Check:** Inspect the request headers. Mistral accepts `Authorization: Bearer <token>` or `X-Auth-Token: <token>`.
+* **Resolution:** Provide a valid token in one of the supported headers.
+
+## K8s M2M: ServiceAccount Token with Wrong Audience
+
+Applies when `M2M_AUTH_MODE: k8s` or `M2M_AUTH_MODE: hybrid`.
+
+* **Symptom:** API returns `HTTP 401 Unauthorized` if the token is supplied with different audience than the Mistral configured audience.
+* **Log message:**
+  ```
+  Invalid K8s SA token
+  Failed to validate access token
+  ```
+  (the underlying verifier error explains that the `aud` claim does not contain the configured audience).
+* **Check:** Compare the audience claim in token with configured audience (`k8s-sa-audience` in mistral-common-params cm) claim.
+
+* **Resolution:** Use ServiceAccount token with the correct audience (default is `netcracker`).
+
+## K8s M2M: Expired, Tampered or Garbage Token
+
+Applies when `M2M_AUTH_MODE: k8s` or `M2M_AUTH_MODE: hybrid`.
+
+* **Symptom:** API returns `HTTP 401 Unauthorized`.
+* **Log message:**
+  ```
+  Invalid K8s SA token
+  Failed to validate access token
+  K8s token authentication failed: <details>
+  ```
+* **Check:**
+  * Decode the token and check `exp`. If it is in the past, the token has expired.
+  * If the token was modified or is random text, signature verification fails.
+  * For Keycloak OIDC tokens in `k8s` mode, the K8s SA handler rejects them.
+* **Resolution:**
+  * Request a fresh projected token (Kubernetes rotates them automatically; if you build one manually, set a future `exp`).
+  * Do not modify the token after retrieval.
+  * Ensure the token type matches the Mistral auth mode (see [Mode Mismatch Between Caller and Mistral](#k8s-m2m-mode-mismatch-between-caller-and-mistral)).
+
+## K8s M2M: Missing Projected ServiceAccount Token File
+
+Applies when `M2M_AUTH_MODE: k8s` or `M2M_AUTH_MODE: hybrid`.
+
+* **Symptom:** In `k8s` or `hybrid` mode, outbound machine-to-machine calls from Mistral fail because Mistral cannot read its own projected ServiceAccount token.
+* **Log message:**
+  ```
+  Failed to read projected Kubernetes ServiceAccount token from /var/run/secrets/tokens/<audience>/token: [Errno 2] No such file or directory
+  Kubernetes ServiceAccount token is not available
+  ```
+* **Check:** Verify the projected volume is present on the pod (Executor pod for http actions and Notifier for webhook notifications) that makes the outbound call at /var/run/secrets/tokens/<audience>/
+
+* **Resolution:** The operator mounts this volume automatically when `M2M_AUTH_MODE` is `k8s` or `hybrid`. If it is missing, confirm the mode in the `MistralService` CR and redeploy. The projected token path is `/var/run/secrets/tokens/<audience>/token`.
+
+## K8s M2M: OIDC Discovery / JWKS Endpoint Unavailable
+
+Applies when `M2M_AUTH_MODE: k8s` or `M2M_AUTH_MODE: hybrid`.
+
+* **Symptom:** Intermittent `HTTP 401 Unauthorized` or slow authentication. First authentication after pod start fails.
+* **Log message:** Retries while fetching the JWKS or discovery document from the Kubernetes issuer, for example connection errors to `https://<issuer>/.well-known/openid-configuration`.
+* **Check:**
+  * From a Mistral API pod, test connectivity to the issuer and JWKS endpoints.
+  * Check whether the cluster OIDC issuer is reachable from the pod network. GKE clusters use anonymous discovery; other clusters may require the cluster CA.
+* **Resolution:** Ensure the pod can reach the Kubernetes API / OIDC issuer. If the issuer is not resolvable, fix DNS or network policies. The verifier caches keys, so a transient failure usually recovers once discovery succeeds.
+
+## K8s M2M: Mode Mismatch Between Caller and Mistral
+
+Applies when `M2M_AUTH_MODE: k8s` or `M2M_AUTH_MODE: hybrid`.
+
+* **Symptom:** API returns `HTTP 401 Unauthorized`.
+  * An IDP/Keycloak token is sent to a Mistral running in pure `k8s` mode.
+  * A K8s ServiceAccount token is sent to a Mistral running in pure `legacy` mode.
+* **Log message:**
+  ```
+  Invalid K8s SA token
+  Failed to validate access token
+  ```
+* **Check:**
+  * Determine the effective auth mode in the running Mistral: check auth-type in mistral-common-params cm.
+  * Also check the Helm-level setting that drives it: check value of M2M_AUTH_MODE in mistralservice cr.
+
+* **Resolution:** Align the caller token type with the Mistral mode:
+  * `M2M_AUTH_MODE: legacy`  → use Keycloak tokens.
+  * `M2M_AUTH_MODE: k8s`  → use K8s SA tokens with the configured audience.
+  * `M2M_AUTH_MODE: hybrid` → both token types are accepted.
+
+## K8s M2M: Invalid M2M_AUTH_MODE Value
+
+* **Symptom:** The expected `k8s` or `hybrid` mode is not active; auth behaves as `legacy` without an obvious error in the Mistral service logs.
+* **Log message:** In the operator logs:
+  ```
+  Invalid M2M_AUTH_MODE '<value>'. Falling back to legacy mode.
+  ```
+* **Check:** M2M_AUTH_MODE value in mistralservice cr. Valid values are `legacy`, `k8s`, and `hybrid`.
+* **Resolution:** Set `M2M_AUTH_MODE` to one of the supported values in the Helm values and redeploy. Do not rely on arbitrary values, because the operator silently falls back to `legacy`.
+
 ## RabbitMQ Collects a Lot of Messages
 
 ### Problem
@@ -200,36 +312,18 @@ The following steps should be done in the RabbitMQ pod:
 
 First, before cleaning the queue, you need to check that there are no unacked messages.
 
-You can check this on the RabbitMQ's user interface in the **Channels** tab:
-
-![Channels List](/custom_doc/img/rabbitmq_channels.png)
+You can check this on the RabbitMQ's user interface in the **Channels** tab. Open the RabbitMQ Management UI, navigate to the **Channels** tab, and look for channels that have a non-zero value in the **Unacked** column.
 
 * If you have some, you need to close the connection associated with this channel, so all unacked messages will be returned to the queue.
-* Check the name of the channel with these unacked messages through RabbitMQ's user interface:
-
-![Channel](/custom_doc/img/rabbitmq_channel.png)
-
-* Get pid of these connection via terminal: `# rabbitmqctl list_connections pid name`. For example:
-
-![Connections List](/custom_doc/img/rabbitmq_list_connections.png)
-
-* Remove this connection via terminal: `# rabbitmqctl close_connection '<YOUR_CONNECTION_PID>' 'STR_EXPLANATION'`. For example:
-
-![Remove Connection](/custom_doc/img/rabbitmq_close_connection.png)
+* Check the name of the channel with these unacked messages through RabbitMQ's user interface: open the channel details and note the **Channel name** or **Connection** value.
+* Get pid of these connection via terminal: `# rabbitmqctl list_connections pid name`. For example, run this command on the RabbitMQ node and find the row whose `name` matches the connection you identified.
+* Remove this connection via terminal: `# rabbitmqctl close_connection '<YOUR_CONNECTION_PID>' 'STR_EXPLANATION'`. For example, replace `<YOUR_CONNECTION_PID>` with the `pid` value from the previous step.
 
 Second, remove all the messages from your queues with lots of messages:
 
-* Check the name of the queue that collects a lot of messages in RabbitMQ's UI in the **Queues** tab:
-
-![Queues List](/custom_doc/img/rabbitmq_queues.png)
-
-* Purge this queue via terminal: `# rabbitmqctl purge_queue [-p VHOST] 'QUEUE_NAME'`. For example:
-
-![Purge Queue](/custom_doc/img/rabbitmq_purge_queue.png)
-
-* Check that all the messages were successfully deleted:
-
-![After Purge](/custom_doc/img/rabbitmq_after_purge.png)
+* Check the name of the queue that collects a lot of messages in RabbitMQ's UI in the **Queues** tab. Open the RabbitMQ Management UI, go to the **Queues** tab, and identify the queue with a large number in the **Messages** column (for example, `mistral_engine` or another Mistral-related queue).
+* Purge this queue via terminal: `# rabbitmqctl purge_queue [-p VHOST] 'QUEUE_NAME'`. For example, if the queue is in the default vhost, you can omit `-p VHOST`.
+* Check that all the messages were successfully deleted by returning to the RabbitMQ Management UI **Queues** tab. The queue you purged should now show **0** in the **Messages** column.
 
 #### Limit Message Count
 
@@ -349,3 +443,20 @@ A possible solution could be to increase the number of replicas, or to increase 
 **Solution**:
 
 To fix problems related to RabbitMQ, refer to the **RabbitMQ Troubleshooting** section in the _Cloud Platform Troubleshooting Guide_.
+
+
+## Expected Error: InvalidCatalogNameError on Initial Startup of Bluegreen Agent
+
+### Problem
+During the first startup of `bluegreen-agent` (in `mistral-operator`), the container logs may show the following error and force a single container restart:
+
+```text
+asyncpg.exceptions.InvalidCatalogNameError: database <mistral_db_name> does not exist
+ERROR: Application startup failed. Exiting.
+```
+### Expected Behavior:
+This error can be safely ignored.
+
+It occurs on initial initialization when the mistral database has not yet been provisioned or created.
+
+The operator automatically restarts, initializes the database, and resumes normal execution without manual intervention.
