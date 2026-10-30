@@ -12,7 +12,6 @@ LINTER_TAG ?= common_linter_integration
 
 DEFAULT_BRANCH ?= main
 
-PYTHON ?= python3
 # PY_BUILD left empty: mistral unit tests use tox/stestr, not pytest via make.
 
 include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))Makefile.precheck

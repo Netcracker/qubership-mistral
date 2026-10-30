@@ -54,6 +54,5 @@ jobs:
         run: make test
         env:
           CI: "true"
-          DEFAULT_BRANCH: "main"
           PIP_CACHE_DIR: "${{ github.workspace }}/.pip-cache"
           MAVEN_OPTS: "-Dmaven.repo.local=${{ github.workspace }}/.m2/repository"
