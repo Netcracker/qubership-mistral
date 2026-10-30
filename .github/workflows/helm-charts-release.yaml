@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Check if tag exists
         id: check_tag
-        uses: netcracker/qubership-workflow-hub/actions/tag-action@main
+        uses: netcracker/qubership-workflow-hub/actions/tag-action@665288138e45c18b5ae16af55605bfb0e70edd77 # main
         with:
           tag-name: '${{ inputs.release }}'
           ref: ${{ github.ref }}
@@ -76,7 +76,7 @@ jobs:
         run: |
           echo "IMAGE=${{ matrix.component.name }}" >> $GITHUB_ENV
       - name: Docker build
-        uses: netcracker/qubership-workflow-hub/actions/docker-action@main
+        uses: netcracker/qubership-workflow-hub/actions/docker-action@665288138e45c18b5ae16af55605bfb0e70edd77 # main
         with:
           ref: ${{ github.ref }}
           download-artifact: false
@@ -98,7 +98,7 @@ jobs:
           fetch-depth: 0
       - name: "Update versions in values"
         id: update-versions
-        uses: netcracker/qubership-workflow-hub/actions/helm-charts-release@v1.0.3
+        uses: netcracker/qubership-workflow-hub/actions/helm-charts-release@7860be3b17e788ba26efe4ec4d699b4e786245b5 # v1.0.7
         with:
           release-version: ${{ inputs.release }}
           config-file: .github/helm-charts-release-config.yaml
@@ -122,7 +122,7 @@ jobs:
           echo "IMAGE_VERSION=${{ fromJson(needs.chart-release-prepare.outputs.images-versions)[matrix.component.name] || inputs.release }}" >> $GITHUB_ENV
 
       - name: Docker build
-        uses: netcracker/qubership-workflow-hub/actions/docker-action@main
+        uses: netcracker/qubership-workflow-hub/actions/docker-action@665288138e45c18b5ae16af55605bfb0e70edd77 # main
         with:
           ref: release-${{ inputs.release }}
           download-artifact: false
@@ -150,7 +150,7 @@ jobs:
 
       - name: Run chart-releaser
         #continue-on-error: true
-        uses: netcracker/chart-releaser-action@main
+        uses: netcracker/chart-releaser-action@ec6582488ed05a759813cbeb6e56c33b541f56a8 # main
         with:
           charts_dir: operator/deployments/charts
           release_name_template: "{{ .Version }}"
@@ -160,7 +160,7 @@ jobs:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: "Release-drafter"
-        uses: netcracker/release-drafter@master
+        uses: netcracker/release-drafter@130c08399304912ffe90e9604e4328f2fdcd7619 # master
         with:
           config-name: release-drafter-config.yml
           publish: true
@@ -170,7 +170,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload Assets
-        uses: netcracker/qubership-workflow-hub/actions/assets-action@v2.0.11
+        uses: netcracker/qubership-workflow-hub/actions/assets-action@e6afd0a6bcc4f24d73e3e4d5fb9a31ada009e3f1 # v2.8.2
         with:
           tag: ${{ inputs.release }}
           item-path: .cr-release-packages/*.tgz
