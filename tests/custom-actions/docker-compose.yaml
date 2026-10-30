@@ -1,11 +1,11 @@
 version: '3'
 services:
   postgres:
-    image: postgres:9.6.2-alpine
+    image: postgres:9.6.2-alpine@sha256:f88000211e3c682e7419ac6e6cbd3a7a4980b483ac416a3b5d5ee81d4f831cc9
     network_mode: "host"
 
   rabbit:
-    image: rabbitmq:3.6-management-alpine
+    image: rabbitmq:3.6-management-alpine@sha256:483745c7faebb33214e0b2630d99c23c725434dd7c388339fc4083217bd004fb
     network_mode: "host"
 
   mistral:
