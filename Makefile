@@ -99,6 +99,10 @@ test-operator: $(VENV)/bin/tox
 # this Makefile's existing test targets. The lint-related targets are
 # exposed here and delegated to Makefile.precheck.
 
+
+LINTER_IMAGE ?= ghcr.io/netcracker/linter
+LINTER_TAG ?= common_linter_integration
+
 DEFAULT_BRANCH ?= main
 export DEFAULT_BRANCH
 
