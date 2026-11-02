@@ -1,0 +1,29 @@
+name: Common Linter
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/netcracker/linter:latest
+      options: --entrypoint=""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run common linter
+        run: make lint
+        env:
+          RUN_LOCAL: "true"
+          DEFAULT_BRANCH: "main"
+          SKILLCHECK_PATTERNS: ".claude/skills .agents/skills"

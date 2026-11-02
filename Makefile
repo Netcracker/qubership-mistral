@@ -92,3 +92,20 @@ test-mistral: $(VENV)/bin/tox
 
 test-operator: $(VENV)/bin/tox
 	$(TOX) $(TOXOPTS) -e operator -- $(ARGS)
+
+# Common linter integration
+# Makefile.precheck is not included directly because it defines targets
+# (test, test-go, test-python, test-java, verify) that would conflict with
+# this Makefile's existing test targets. The lint-related targets are
+# exposed here and delegated to Makefile.precheck.
+
+DEFAULT_BRANCH ?= main
+export DEFAULT_BRANCH
+
+.PHONY: lint lint-super-linter skill-validate lint-fix verify
+lint lint-super-linter skill-validate lint-fix:
+	$(MAKE) -f Makefile.precheck $@
+
+# verify must run the consumer's test target, not Makefile.precheck's
+# test-go/test-python/test-java targets.
+verify: lint test
