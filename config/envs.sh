@@ -21,7 +21,10 @@ function unset_pg_ssl_certs_if_external_pg {
     esac
 
     local detected
-    detected="$(python3 "$(dirname "${BASH_SOURCE[0]}")/pg_ssl_detect.py" 2>/dev/null)" || return 0
+    detected="$(python3 "$(dirname "${BASH_SOURCE[0]}")/pg_ssl_detect.py")" || {
+        echo "WARNING: pg_ssl_detect.py failed with exit code $?, keeping platform certificates for PostgreSQL" >&2
+        return 0
+    }
 
     if [ "${detected}" = "external" ]; then
         echo "PostgreSQL ${PG_HOST} detected as externally managed and sslmode is '${PGSSLMODE:-require}': unsetting PGSSLROOTCERT, PGSSLCERT, PGSSLKEY"
@@ -44,7 +47,10 @@ function unset_rabbitmq_ssl_certs_if_external_rmq {
     fi
 
     local detected
-    detected="$(python3 "$(dirname "${BASH_SOURCE[0]}")/rmq_ssl_detect.py" 2>/dev/null)" || return 0
+    detected="$(python3 "$(dirname "${BASH_SOURCE[0]}")/rmq_ssl_detect.py")" || {
+        echo "WARNING: rmq_ssl_detect.py failed with exit code $?, keeping platform certificates for RabbitMQ" >&2
+        return 0
+    }
 
     if [ "${detected}" = "external" ]; then
         echo "RabbitMQ ${RABBIT_HOST} detected as externally managed: unsetting ssl_key_file, ssl_cert_file, ssl_ca_file"

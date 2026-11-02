@@ -109,4 +109,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        pass
+        LOG.exception("RabbitMQ external detection failed, "
+                      "keeping platform certificates")

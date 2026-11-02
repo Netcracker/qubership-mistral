@@ -113,4 +113,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        pass
+        LOG.exception("PostgreSQL external detection failed, "
+                      "keeping platform certificates")
