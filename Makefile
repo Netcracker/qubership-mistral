@@ -14,4 +14,4 @@ DEFAULT_BRANCH ?= main
 
 # PY_BUILD left empty: mistral unit tests use tox/stestr, not pytest via make.
 
-include $(dir $(abspath $(lastword $(MAKEFILE_LIST))))Makefile.precheck
+include Makefile.precheck
