@@ -43,7 +43,7 @@ mistral:
       monitoring:
         enabled: true
       postgres:
-        sslmode: verify-full
+        sslmode: require
       rabbitmq:
         enabled: true
       kafka:
