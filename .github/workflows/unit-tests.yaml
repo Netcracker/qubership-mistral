@@ -1,0 +1,37 @@
+name: Unit Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    # Language-specific test image; the common linter image is used for lint only.
+    container:
+      image: python:3.14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache Python packages
+        uses: actions/cache@v4
+        with:
+          path: .pip-cache
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Run unit tests
+        run: make test-python
+        env:
+          CI: "true"
+          PIP_CACHE_DIR: "${{ github.workspace }}/.pip-cache"
