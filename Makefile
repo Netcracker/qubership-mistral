@@ -94,10 +94,10 @@ test-operator: $(VENV)/bin/tox
 	$(TOX) $(TOXOPTS) -e operator -- $(ARGS)
 
 # Common linter integration
-# Makefile.common is not included directly because it defines targets
+# common.mk is not included directly because it defines targets
 # (test, test-go, test-python, test-java, verify) that would conflict with
 # this Makefile's existing test targets. The lint-related targets are
-# exposed here and delegated to Makefile.common.
+# exposed here and delegated to common.mk.
 
 
 LINTER_IMAGE ?= ghcr.io/netcracker/linter
@@ -108,8 +108,8 @@ export DEFAULT_BRANCH
 
 .PHONY: lint lint-super-linter skill-validate lint-fix verify
 lint lint-super-linter skill-validate lint-fix:
-	$(MAKE) -f Makefile.common $@
+	$(MAKE) -f common.mk $@
 
-# verify must run the consumer's test target, not Makefile.common's
+# verify must run the consumer's test target, not common.mk's
 # test-go/test-python/test-java targets.
 verify: lint test
