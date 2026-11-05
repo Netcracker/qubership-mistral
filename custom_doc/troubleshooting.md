@@ -12,6 +12,7 @@
 * [Execution of Workflow is Stuck](#execution-of-workflow-is-stuck)
 * [Mistral Service was not Deployed](#mistral-service-was-not-deployed)
 * [Request on Execution Creation is Stuck](#request-on-execution-creation-is-stuck)
+* [RPC Request Times Out but the Operation Was Executed](#rpc-request-times-out-but-the-operation-was-executed)
 * [Different IDP Tenants](#different-idp-tenants)
 * [K8s M2M: Missing or Invalid Authorization Header](#k8s-m2m-missing-or-invalid-authorization-header)
 * [K8s M2M: ServiceAccount Token with Wrong Audience](#k8s-m2m-serviceaccount-token-with-wrong-audience)
@@ -138,6 +139,88 @@ $ source ./envs.sh
 $ mistral run-action std.noop
 {"result": null}
 ```
+
+## RPC Request Times Out but the Operation Was Executed
+
+### Problem
+
+A Mistral component that sends an RPC request and waits for the reply fails after `rpc_response_timeout` (90 seconds by default). The log of that component, which is the RPC client, contains:
+
+```text
+This rpc call "<method>" took longer than configured <N> seconds.
+```
+
+Any Mistral component can be the client, and any other can be the server:
+
+| Client | Server | Example methods |
+|--------|--------|-----------------|
+| `mistral-api` | `mistral-engine` | `plan_workflow`, `start_workflow`, `on_action_complete` |
+| `mistral-executor` | `mistral-engine` | `on_action_complete` |
+| `mistral-engine` | `mistral-executor` | `run_action` |
+| `mistral-engine` | `mistral-engine` | `start_workflow`, `on_action_complete` |
+
+For a call made from the API, the caller gets HTTP 500, for example, when creating an execution or completing an action execution.
+
+The operation itself has succeeded: the server log has a record about the received request, and the work is done as usual. Only the reply is lost, so the client reports a failure for an operation that was executed.
+
+The reply is lost when the RabbitMQ queue it is sent to is not reachable. For example, a RabbitMQ node is partitioned from the rest of the RabbitMQ cluster but still accepts client connections. Mistral pods connected to that node lose replies, while pods connected to healthy nodes keep working. The failures are therefore intermittent and can move from one Mistral pod to another.
+
+### Solution
+
+1. Check that the request was processed.
+   Take the time and the method name from the timeout record in the client log, for example, `plan_workflow`.
+   Then find the record about the same method in the log of the server, which is `mistral-engine` for most methods, shortly after that time:
+
+   ```text
+   Received RPC request 'plan_workflow'[workflow_identifier=...
+   ```
+
+   If the record is there, the server received the request and only the reply was lost.
+   Search by the `Received RPC request` prefix and the time, because some methods start a call chain, for example, `plan_workflow` can be followed by `start_task` and `run_action`.
+   `mistral-executor` writes the `Received RPC request 'run_action'` record on the `DEBUG` level only.
+
+2. Do not repeat the failed request blindly, because it can duplicate the operation.
+   * Execution creation: check whether the execution exists, for example, `GET /v2/executions/<execution_id>`, or find it in the list of recent executions.
+     If your client passes the execution `id` in the create request, repeating the request with the same `id` is safe: the existing execution is returned instead of a new one.
+   * Action completion: if the `on_action_complete` call is repeated, the server answers `Action <action_ex_id> is already completed`. This confirms that the first call was processed and is not a new failure.
+
+3. Check the RabbitMQ cluster state in a RabbitMQ pod:
+
+   ```bash
+   rabbitmq-diagnostics cluster_status
+   ```
+
+   The cluster has a problem if a node is listed under `Disk Nodes` but is missing from `Running Nodes`, or if the `Network Partitions` section is not empty.
+
+4. Restore the RabbitMQ cluster:
+   1. Remove the cause of the network problem between the RabbitMQ nodes.
+   1. Restart the RabbitMQ node that is isolated from the cluster.
+   1. Run `rabbitmq-diagnostics cluster_status` again and check that all nodes are under `Running Nodes` and there are no network partitions.
+
+5. Check the Mistral services after the cluster is restored. Restart a service, including the client that reported the timeout, if it does not recover by itself, that is, if one of the following is true:
+   * `mistral-engine` does not contain the `Engine server started.` record.
+   * The log contains the following message:
+
+     ```text
+     Queue <queue_name> is stuck on unresponsive node. Trying to delete the queue and redeclare it again
+     ```
+
+### Detecting Lost Replies in Logs
+
+If a service cannot deliver a reply because the reply queue of the client does not exist, the server writes the following records, where `<reply_queue>` is the queue of the client and `<message_id>` is the ID of the request:
+
+```text
+WARNING ... <reply_queue> doesn't exist, drop reply to <message_id>
+ERROR ... The reply <message_id> failed to send after 60 seconds due to a missing queue (<reply_queue>). Abandoning...
+```
+
+Search for `drop reply to` or `failed to send after` in the logs of the servers, `mistral-engine` and `mistral-executor`, to find out when the replies started to get lost and how many of them were lost.
+
+The `60 seconds` is the value of `kombu_missing_consumer_retry_timeout`: the service waits this time for each undeliverable reply before abandoning it.
+
+**Note**: These records are written only if `direct_mandatory_flag` in the `[oslo_messaging_rabbit]` section is not `0`. If your custom configuration sets `direct_mandatory_flag = 0`, remove it and redeploy.
+
+If the reply queue still exists but is located on an unreachable RabbitMQ node, the reply can be lost without these records. In this case, rely on the timeout records in the client log and on the steps above.
 
 ## Different IDP Tenants
 

@@ -68,6 +68,8 @@ section: `MistralAPIDegraded`, `MistralEngineDegraded`, `MistralExecutorDegraded
 | Intermittent `HTTP 401` or a failing first authentication after pod start, with connection errors to `https://<issuer>/.well-known/openid-configuration` | K8s M2M: OIDC Discovery / JWKS Endpoint Unavailable |
 | `Invalid M2M_AUTH_MODE '<value>'. Falling back to legacy mode.` in operator logs | K8s M2M: Invalid M2M_AUTH_MODE Value |
 | `Engine server started.` missing from `mistral-engine` logs | Request on Execution Creation is Stuck |
+| `This rpc call "<method>" took longer than configured <N> seconds.` in the log of any RPC client (`mistral-api`, `mistral-executor`, `mistral-engine`), while the server log has `Received RPC request '<method>'` | RPC Request Times Out but the Operation Was Executed |
+| `<reply_queue> doesn't exist, drop reply to <message_id>` or `failed to send after 60 seconds due to a missing queue` | RPC Request Times Out but the Operation Was Executed |
 | `There are active connections to this database.` in the deploy log | Mistral Cannot Deploy Because of Active Connections to DB |
 | `asyncpg.exceptions.InvalidCatalogNameError: database <mistral_db_name> does not exist` in `bluegreen-agent` on first startup | Expected Error: InvalidCatalogNameError on Initial Startup of Bluegreen Agent (benign) |
 | `Mistral critical tests failed`, or `mistral-tests` pod in `Error` / `CrashLoopBackOff` / `OOMKilled` | `references/robot-tests.md` (not `troubleshooting.md`) |
@@ -81,7 +83,8 @@ section: `MistralAPIDegraded`, `MistralEngineDegraded`, `MistralExecutorDegraded
 | Mistral API slow or not responding | Mistral API is Not Responding |
 | Execution of a workflow does not finish | Execution of Workflow is Stuck |
 | A Mistral service did not come up after deploy | Mistral Service was not Deployed |
-| Execution or action creation request hangs or times out | Request on Execution Creation is Stuck |
+| Execution or action creation request hangs or times out | Request on Execution Creation is Stuck; if the operation was in fact executed and only the response timed out, RPC Request Times Out but the Operation Was Executed |
+| RPC call timed out (HTTP 500 from the API, or an RPC error in the executor or engine log), but the execution or action result exists | RPC Request Times Out but the Operation Was Executed |
 | Mistral entities not visible through the API | Different IDP Tenants |
 | API returns `HTTP 401` while `M2M_AUTH_MODE` is `k8s` or `hybrid` | Use the log lines in the table above to pick the matching K8s M2M section |
 | RabbitMQ queue keeps growing; service killed by resource limits on reconnect | RabbitMQ Collects a Lot of Messages |
