@@ -108,6 +108,14 @@ class TestKeyCloakOIDCAuth(base.BaseTest):
 
         self.override_config('auth_url', AUTH_URL, group='keycloak_oidc')
         self.override_config('idp_url', IDP_URL, group='oauth2')
+        self.override_config(
+            'project_rules',
+            json.dumps(
+                [{"type": "extract", "field": "iss",
+                  "pattern": "*/realms/{value}"}]
+            ),
+            group='auth'
+        )
 
         self.auth_handler = keycloak.KeycloakAuthHandler()
 
@@ -375,6 +383,14 @@ class TestKeyCloakOIDCAuthApp(base.DbTestCase):
         self.override_config('auth_type', 'keycloak-oidc')
         self.override_config('auth_url', AUTH_URL, group='keycloak_oidc')
         self.override_config('idp_url', IDP_URL, group='oauth2')
+        self.override_config(
+            'project_rules',
+            json.dumps(
+                [{"type": "extract", "field": "iss",
+                  "pattern": "*/realms/{value}"}]
+            ),
+            group='auth'
+        )
 
         self.app = pecan.testing.load_test_app(
             dict(pecan_app.get_pecan_config())

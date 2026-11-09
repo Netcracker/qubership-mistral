@@ -1486,15 +1486,28 @@ def get_sub_executions(id, workflow, accepted=True,
 def get_accepted_executions_indexes(id, workflow, accepted, session=None):
     table = 'workflow' if workflow else 'action'
     table += '_executions_v2'
+
+    if b.get_driver_name() == 'sqlite':
+        columns = (
+            "json_extract(runtime_context, '$.index'), "
+            "json_extract(runtime_context, '$.retry_no')"
+        )
+        accepted_value = 1 if accepted else 0
+    else:
+        columns = (
+            "cast(runtime_context AS json)->'index', "
+            "cast(runtime_context AS json)->'retry_no'"
+        )
+        accepted_value = 'true' if accepted else 'false'
+
     sql = text(
-        f"SELECT cast(runtime_context AS json)->'index', "
-        f"cast(runtime_context AS json)->'retry_no' from {table} "
-        f"WHERE accepted={accepted} AND "
+        f"SELECT {columns} from {table} "
+        f"WHERE accepted={accepted_value} AND "
         "state IN ('SUCCESS', 'ERROR', 'CANCELLED','SKIPPED') "
-        f"AND task_execution_id='{id}'"
+        "AND task_execution_id=:task_ex_id"
     )
 
-    query = b.get_engine().execute(sql)
+    query = b.get_engine().execute(sql, {'task_ex_id': id})
     rows = query.fetchall()
 
     return [(row[0], row[1]) for row in rows]

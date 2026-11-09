@@ -335,11 +335,11 @@ class InlineYAQLEvaluatorTest(base.BaseTest):
         self.override_config('convert_sets_to_lists', True, 'yaql')
 
         def _restore_engine(old_engine):
-            expr.YAQL_ENGINE = old_engine
+            expr._YAQL_ENGINE_LOCAL  = old_engine
 
-        self.addCleanup(_restore_engine, expr.YAQL_ENGINE)
+        self.addCleanup(_restore_engine, expr._YAQL_ENGINE_LOCAL )
 
-        expr.YAQL_ENGINE = expr.create_yaql_engine_class(
+        expr._YAQL_ENGINE_LOCAL  = expr.create_yaql_engine_class(
             CONF.yaql.keyword_operator,
             CONF.yaql.allow_delegates,
             expr.get_yaql_engine_options()

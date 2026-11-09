@@ -1100,7 +1100,7 @@ class WithItemsTask(RegularTask):
             result.append((i, self._get_action_input(ctx)))
 
         return result
-    
+
     def is_index_invalid(self, index):
         with db_api.named_lock('with-items-%s' % self.task_ex.id):
 
@@ -1111,7 +1111,7 @@ class WithItemsTask(RegularTask):
             )
 
             finished = [idx[0] for idx in indices]
-            
+
             return index in finished
 
     def _get_with_items_context(self):

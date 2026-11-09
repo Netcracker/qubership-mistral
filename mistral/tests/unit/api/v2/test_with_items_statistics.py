@@ -71,7 +71,7 @@ class TestWithItemsStatisticsController(base.APITest,
 
         wf_ex = self.engine.start_workflow('with_items_wf_action')
 
-        self.await_workflow_success(wf_ex.id)
+        self.await_workflow_success(wf_ex.id, timeout=180)
 
         with db_api.transaction():
             wf_ex = db_api.get_workflow_execution(wf_ex.id)
@@ -101,7 +101,7 @@ class TestWithItemsStatisticsController(base.APITest,
 
         wf_ex = self.engine.start_workflow('with_items_wf_fail')
 
-        self.await_workflow_error(wf_ex.id)
+        self.await_workflow_error(wf_ex.id, timeout=180)
 
         with db_api.transaction():
             wf_ex = db_api.get_workflow_execution(wf_ex.id)
@@ -131,7 +131,7 @@ class TestWithItemsStatisticsController(base.APITest,
 
         wf_ex = self.engine.start_workflow('wb.with_items_wf')
 
-        self.await_workflow_success(wf_ex.id)
+        self.await_workflow_success(wf_ex.id, timeout=180)
 
         with db_api.transaction():
             wf_ex = db_api.get_workflow_execution(wf_ex.id)

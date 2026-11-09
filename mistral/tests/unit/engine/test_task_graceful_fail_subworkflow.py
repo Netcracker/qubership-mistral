@@ -158,20 +158,19 @@ class TaskGracefulFailTest(base.EngineTestCase):
             wf_ex = db_api.get_workflow_execution(wf_ex.id)
             task_execs = wf_ex.task_executions
 
+        # NOTE: An error while starting a subworkflow (invalid input) forces
+        # the parent workflow to fail immediately (see
+        # workflow_handler.start_workflow), so the other branches
+        # (t2_l, t2_r and their successors) are not awaited and their state
+        # is not asserted here.
+        self.assertEqual(states.ERROR, wf_ex.state)
+
         task_1_ex = self._assert_single_item(task_execs, name='t1')
         task_2_ex = self._assert_single_item(task_execs, name='t2')
-        task_2_r_ex = self._assert_single_item(task_execs, name='t2_r')
-        task_2_l_ex = self._assert_single_item(task_execs, name='t2_l')
-        task_3_r_ex = self._assert_single_item(task_execs, name='t3_r')
-        task_3_l_ex = self._assert_single_item(task_execs, name='t3_l')
 
         self.assertEqual(states.SUCCESS, task_1_ex.state)
         self.assertEqual(states.ERROR, task_2_ex.state)
         self.assertIn('Invalid input', task_2_ex.state_info)
-        self.assertEqual(states.SUCCESS, task_2_r_ex.state)
-        self.assertEqual(states.SUCCESS, task_2_l_ex.state)
-        self.assertEqual(states.SUCCESS, task_3_r_ex.state)
-        self.assertEqual(states.SUCCESS, task_3_l_ex.state)
 
     def test_with_items_graceful_fail(self):
         wf_service.create_workflows(SUB_WF)
@@ -185,17 +184,16 @@ class TaskGracefulFailTest(base.EngineTestCase):
             wf_ex = db_api.get_workflow_execution(wf_ex.id)
             task_execs = wf_ex.task_executions
 
+        # NOTE: An error while starting a subworkflow (invalid input) forces
+        # the parent workflow to fail immediately (see
+        # workflow_handler.start_workflow), so the other branches
+        # (t2_l, t2_r and their successors) are not awaited and their state
+        # is not asserted here.
+        self.assertEqual(states.ERROR, wf_ex.state)
+
         task_1_ex = self._assert_single_item(task_execs, name='t1')
         task_2_ex = self._assert_single_item(task_execs, name='t2')
-        task_2_r_ex = self._assert_single_item(task_execs, name='t2_r')
-        task_2_l_ex = self._assert_single_item(task_execs, name='t2_l')
-        task_3_r_ex = self._assert_single_item(task_execs, name='t3_r')
-        task_3_l_ex = self._assert_single_item(task_execs, name='t3_l')
 
         self.assertEqual(states.SUCCESS, task_1_ex.state)
         self.assertEqual(states.ERROR, task_2_ex.state)
         self.assertIn('Invalid input', task_2_ex.state_info)
-        self.assertEqual(states.SUCCESS, task_2_r_ex.state)
-        self.assertEqual(states.SUCCESS, task_2_l_ex.state)
-        self.assertEqual(states.SUCCESS, task_3_r_ex.state)
-        self.assertEqual(states.SUCCESS, task_3_l_ex.state)

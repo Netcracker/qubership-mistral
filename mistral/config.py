@@ -73,6 +73,7 @@ auth_opts = [
 
 default_project_id_opt = cfg.StrOpt(
     'default_project_id',
+    default='<default-project>',
     help=_(
         'Fallback project_id used when no project rule matches. '
     )

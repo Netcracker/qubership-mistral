@@ -26,7 +26,7 @@ from mistral import context as auth_context
 from mistral.db.v2 import api as db_api
 from mistral import exceptions as exc
 from mistral.scheduler import base as sched_base
-from mistral.scheduler import legacy_scheduler
+from mistral.services import legacy_scheduler
 from mistral.tests.unit import base
 from mistral.tests.unit.utils.test_utils import TimeoutThreadWithException
 from mistral_lib import actions as ml_actions
