@@ -468,6 +468,23 @@ class SubworkflowPauseResumeTest(base.EngineTestCase):
         self.await_task_running(wf2_ex1_task1.id)
         self.await_task_running(wf2_ex2_task1.id)
 
+        # Actions of subworkflows may be created asynchronously, make sure
+        # they exist before completing them.
+        self._await(
+            lambda: db_api.get_action_executions(
+                task_execution_id=wf2_ex1_task1.id
+            ) and db_api.get_action_executions(
+                task_execution_id=wf2_ex2_task1.id
+            )
+        )
+
+        wf2_ex1_task1_actions = db_api.get_action_executions(
+            task_execution_id=wf2_ex1_task1.id
+        )
+        wf2_ex2_task1_actions = db_api.get_action_executions(
+            task_execution_id=wf2_ex2_task1.id
+        )
+
         # Complete action execution of subworkflows.
         self.engine.on_action_complete(
             wf2_ex1_task1_actions[0].id,

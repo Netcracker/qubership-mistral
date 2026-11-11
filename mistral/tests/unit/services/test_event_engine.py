@@ -14,7 +14,6 @@
 #    limitations under the License.
 
 import copy
-import time
 from unittest import mock
 
 from oslo_config import cfg
@@ -134,7 +133,12 @@ class EventEngineTest(base.DbTestCase):
         with mock.patch.object(e_engine, 'engine_client') as client_mock:
             e_engine.event_queue.put(event)
 
-            time.sleep(1)
+            # Event is processed asynchronously, wait till it's handled.
+            self._await(
+                lambda: client_mock.start_workflow.call_count == 1,
+                delay=0.1,
+                timeout=30
+            )
 
             self.assertEqual(1, client_mock.start_workflow.call_count)
 
@@ -178,7 +182,12 @@ class EventEngineTest(base.DbTestCase):
         with mock.patch.object(e_engine, 'engine_client') as client_mock:
             e_engine.event_queue.put(event)
 
-            time.sleep(1)
+            # Event is processed asynchronously, wait till it's handled.
+            self._await(
+                lambda: client_mock.start_workflow.call_count == 1,
+                delay=0.1,
+                timeout=30
+            )
 
             self.assertEqual(1, client_mock.start_workflow.call_count)
 

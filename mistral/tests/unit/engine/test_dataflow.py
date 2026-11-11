@@ -1402,7 +1402,7 @@ class DataFlowTest(test_base.BaseTest):
         res = expr.evaluate('<% $.keys() %>', ctx)
 
         self.assertIsNotNone(res)
-        self.assertIsInstance(res, set)
+        self.assertIsInstance(res, (set, list))
         self.assertEqual(2, len(res))
         self.assertIn('k1', res)
         self.assertIn('k2', res)

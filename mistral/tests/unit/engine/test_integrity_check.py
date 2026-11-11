@@ -65,6 +65,16 @@ class IntegrityCheckTest(base.EngineTestCase):
 
         self.await_task_success(task1_ex.id)
 
+        # Task2 is started asynchronously, wait till it's running.
+        self._await(
+            lambda: any(
+                t.name == 'task2' and t.state == states.RUNNING
+                for t in db_api.get_task_executions(
+                    workflow_execution_id=wf_ex.id
+                )
+            )
+        )
+
         with db_api.transaction():
             wf_ex = db_api.get_workflow_execution(wf_ex.id)
 

@@ -1657,10 +1657,13 @@ class PoliciesTest(base.EngineTestCase):
         wf:
           tasks:
             task1:
-              action: std.sleep seconds="2"
-              with-items: x in <% range(3).toList() %>
+              # The 1st item finishes immediately, the 2nd one is still
+              # running when the task times out (and finishes with error
+              # afterwards), the 3rd one never starts.
+              action: std.sleep seconds=<% $.x %>
+              with-items: x in <% [0, 8, 8] %>
               concurrency: 1
-              timeout: 3
+              timeout: 5
         """
         wf_service.create_workflows(wf)
 
