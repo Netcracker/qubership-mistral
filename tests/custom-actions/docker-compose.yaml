@@ -1,7 +1,7 @@
 version: '3'
 services:
   postgres:
-    image: postgres:9.6.2-alpine
+    image: postgres:9.6.24-alpine@sha256:8342bcb43446694428ec6594e72e4299692854f0fc3aca090b0ab46f4c7f32a1
     network_mode: "host"
 
   rabbit:
