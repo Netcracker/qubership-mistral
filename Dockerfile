@@ -11,7 +11,7 @@ RUN BRANCH=$(git rev-parse --abbrev-ref HEAD) && \
     COMMIT_DATE=$(date) && \
     echo "{ \"git\": { \"branch\": \"$BRANCH\", \"id\": \"$ID\", \"time\": \"$COMMIT_DATE\" }}" > /repo/version.json
 
-FROM python:3.10.21-alpine3.24 AS wheelhouse
+FROM python:3.10.21-alpine3.24@sha256:8d62622e4ad0e5adfd01efecd25a0a5ea571a22aaaeff481796ce10828d46504 AS wheelhouse
 
 RUN python --version && pip --version
 
@@ -38,7 +38,7 @@ RUN python --version && pip --version && \
     pip wheel --no-cache-dir -r /tmp/requirements.txt    -w /wheels && \
     pip wheel --no-cache-dir -r /tmp/nc_requirements.txt -w /wheels
 
-FROM python:3.10.21-alpine3.24
+FROM python:3.10.21-alpine3.24@sha256:8d62622e4ad0e5adfd01efecd25a0a5ea571a22aaaeff481796ce10828d46504
 
 LABEL "maintainer"="Vadim Zelenevskii wortellen@gmail.com"
 
