@@ -276,6 +276,10 @@ def _delete_all(model, **kwargs):
 
 def _get_collection(model, insecure=False, limit=None, marker=None,
                     sort_keys=None, sort_dirs=None, fields=None, **filters):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     columns = (
         tuple([getattr(model, f) for f in fields if hasattr(model, f)])
         if fields else ()
@@ -298,6 +302,10 @@ def _get_collection(model, insecure=False, limit=None, marker=None,
 
 
 def get_db_objects(model, insecure=False, **filters):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     query = b.model_query(model) if insecure else _secure_query(model)
     query = db_filters.apply_filters(query, model, **filters)
 
@@ -305,6 +313,10 @@ def get_db_objects(model, insecure=False, **filters):
 
 
 def _get_count(model, insecure=False, **filters):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     query = b.model_query(model) if insecure else _secure_query(model)
 
     query = db_filters.apply_filters(query, model, **filters)
@@ -319,6 +331,10 @@ def _get_db_object_by_name(model, name, columns=()):
 
 
 def _get_db_object_by_id(model, id, insecure=False, columns=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     columns = (
         tuple([getattr(model, f) for f in columns if hasattr(model, f)])
         if columns and isinstance(columns, list) else columns
@@ -336,6 +352,10 @@ def _get_db_object_by_id(model, id, insecure=False, columns=()):
 def _get_db_object_by_name_and_namespace_or_id(model, identifier,
                                                namespace=None, insecure=False,
                                                columns=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     columns = (
         tuple([getattr(model, f) for f in columns if hasattr(model, f)])
         if columns and isinstance(columns, list) else columns
@@ -366,6 +386,10 @@ def _get_db_object_by_name_and_namespace_or_id(model, identifier,
 def _get_db_object_by_name_and_namespace(model, name,
                                          namespace='', insecure=False,
                                          columns=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     query = (
         b.model_query(model, columns=columns)
         if insecure
@@ -491,13 +515,16 @@ def get_workflow_definition(identifier, namespace='', fields=(), session=None):
         (WorkflowDefinition.name,)
     :return: Workflow definition.
     """
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
     wf_def = _get_db_object_by_name_and_namespace_or_id(
         models.WorkflowDefinition,
         identifier,
         namespace=namespace,
-        insecure=ctx.is_admin,
+        insecure=insecure,
         columns=fields
     )
 
@@ -948,8 +975,8 @@ def delete_action_definitions(session=None, **kwargs):
 @b.session_aware()
 def get_action_execution(id, insecure=False, fields=(), session=None):
     # Allow admin to retrieve action execution by overwriting insecure
-    ctx = context.ctx()
-    insecure = ctx.is_admin or insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
     a_ex = _get_db_object_by_id(models.ActionExecution, id, insecure=insecure,
                                 columns=fields)
@@ -990,6 +1017,10 @@ def create_action_execution(values, session=None):
 
 @b.session_aware()
 def update_action_execution(id, values, insecure=False, session=None):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     a_ex = get_action_execution(id, insecure)
 
     a_ex.update(values.copy())
@@ -1040,12 +1071,15 @@ def _get_action_executions(**kwargs):
 
 @b.session_aware()
 def get_workflow_execution(id, fields=(), session=None):
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
     wf_ex = _get_db_object_by_id(
         models.WorkflowExecution,
         id,
-        insecure=ctx.is_admin,
+        insecure=insecure,
         columns=fields
     )
 
@@ -1112,7 +1146,10 @@ def create_or_update_workflow_execution(id, values, session=None):
 @b.session_aware()
 def delete_workflow_execution(id, strict=True, session=None):
     model = models.WorkflowExecution
-    insecure = context.ctx().is_admin
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
     query = b.model_query(model) if insecure else _secure_query(model)
 
     try:
@@ -1157,7 +1194,11 @@ def delete_workflow_execution_recurse(wf_ex_id):
 
 def _get_all_direct_subworkflows(wf_ex_id):
     model = models.WorkflowExecution
-    insecure = context.ctx().is_admin
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     if insecure:
         query = b.model_query(model, [model.id])
     else:
@@ -1231,14 +1272,13 @@ def get_tasks_statistics_of_execution(wf_ex_id, current_only=False,
 
 @b.session_aware()
 def get_task_execution(id, fields=(), session=None):
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
-    task_ex = _get_db_object_by_id(
-        models.TaskExecution,
-        id,
-        insecure=ctx.is_admin,
-        columns=fields
-    )
+    task_ex = _get_db_object_by_id(models.TaskExecution, id,
+                                   insecure=insecure, columns=fields)
 
     if not task_ex:
         raise exc.DBEntityNotFoundError(
@@ -1830,12 +1870,15 @@ def _get_completed_root_executions_query(columns):
 
 @b.session_aware()
 def get_cron_trigger(identifier, session=None, fields=()):
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
     cron_trigger = _get_db_object_by_name_and_namespace_or_id(
         models.CronTrigger,
         identifier,
-        insecure=ctx.is_admin,
+        insecure=insecure,
         columns=fields,
     )
 
@@ -1849,9 +1892,13 @@ def get_cron_trigger(identifier, session=None, fields=()):
 
 @b.session_aware()
 def get_cron_trigger_by_id(id, session=None, fields=()):
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     cron_trigger = _get_db_object_by_id(models.CronTrigger, id,
-                                        insecure=ctx.is_admin,
+                                        insecure=insecure,
                                         columns=fields)
     if not cron_trigger:
         raise exc.DBEntityNotFoundError(
@@ -2216,6 +2263,10 @@ def _get_accepted_resources(res_type):
 
 @b.session_aware()
 def get_event_trigger(id, insecure=False, session=None, fields=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     event_trigger = _get_db_object_by_id(models.EventTrigger, id, insecure,
                                          columns=fields)
 
@@ -2229,6 +2280,10 @@ def get_event_trigger(id, insecure=False, session=None, fields=()):
 
 @b.session_aware()
 def load_event_trigger(id, insecure=False, session=None, fields=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     return _get_db_object_by_id(models.EventTrigger, id, insecure,
                                 columns=fields)
 
