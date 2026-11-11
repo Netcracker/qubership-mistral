@@ -409,6 +409,37 @@ def _get_db_object_by_name_and_namespace(model, name,
     return query.first()
 
 
+def _get_db_object_by_name_namespace_and_project(model, name, namespace,
+                                                 project_id, columns=()):
+    query = b.model_query(model, columns=columns)
+
+    if namespace is None:
+        namespace = ''
+
+    query = query.filter(
+        sa.and_(
+            model.name == name,
+            model.namespace == namespace,
+            model.project_id == project_id
+        )
+    )
+
+    return query.first()
+
+
+def _get_db_object_by_name_and_project(model, name, project_id, columns=()):
+    query = b.model_query(model, columns=columns)
+
+    query = query.filter(
+        sa.and_(
+            model.name == name,
+            model.project_id == project_id
+        )
+    )
+
+    return query.first()
+
+
 # Workbook definitions.
 
 @b.session_aware()
@@ -464,7 +495,24 @@ def create_workbook(values, session=None):
 @b.session_aware()
 def update_workbook(name, values, session=None):
     namespace = values.get('namespace')
-    wb = get_workbook(name, namespace=namespace)
+
+    # If several projects have a workbook with the same name, update the one
+    # of the current project, not a public one of another project. See the
+    # comment in create_or_update_workflow_definition().
+    wb = _get_db_object_by_name_namespace_and_project(
+        models.Workbook,
+        name,
+        namespace,
+        security.get_project_id()
+    )
+
+    if not wb:
+        wb = get_workbook(name, namespace=namespace)
+
+    # The check requires an authentication context, which internal
+    # maintenance calls don't have.
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(wb)
 
     wb.update(values.copy())
 
@@ -473,7 +521,10 @@ def update_workbook(name, values, session=None):
 
 @b.session_aware()
 def create_or_update_workbook(name, values, session=None):
-    if not _get_db_object_by_name(models.Workbook, name):
+    namespace = values.get('namespace')
+
+    if not _get_db_object_by_name_namespace_and_project(
+            models.Workbook, name, namespace, security.get_project_id()):
         return create_workbook(values)
     else:
         return update_workbook(name, values)
@@ -646,12 +697,24 @@ def update_workflow_definition(identifier, values, session=None):
 
 @b.session_aware()
 def create_or_update_workflow_definition(name, values, session=None):
-    namespace = values.get('namespace')
-    if _get_db_object_by_name_and_namespace_or_id(
-            models.WorkflowDefinition,
-            name,
-            namespace=namespace):
-        return update_workflow_definition(name, values)
+    # NOTE(amorin): A written object always ends up in the project of the
+    # current security context (see model_base.register_secure_model_hooks),
+    # so the object to update must be looked up by the same unique key
+    # (name, namespace, project id) the write would produce. A broader
+    # lookup (e.g. across all projects for an admin) may return an object
+    # of another project with the same name; updating it would move it
+    # into the current project and violate the unique constraint if the
+    # current project already has its own object under that name.
+    wf_def = _get_db_object_by_name_namespace_and_project(
+        models.WorkflowDefinition,
+        name,
+        values.get('namespace'),
+        security.get_project_id()
+    )
+
+    if wf_def:
+        return update_workflow_definition(wf_def.id, values)
+
     return create_workflow_definition(values)
 
 
@@ -752,7 +815,20 @@ def load_code_source(identifier, fields=(), session=None, namespace=''):
 
 @b.session_aware()
 def update_code_source(identifier, values, namespace='', session=None):
-    code_src = get_code_source(identifier, namespace=namespace)
+    # If several projects have a code source with the same name, update the
+    # one of the current project. See create_or_update_workflow_definition().
+    code_src = _get_db_object_by_name_namespace_and_project(
+        models.CodeSource,
+        identifier,
+        namespace,
+        security.get_project_id()
+    )
+
+    if not code_src:
+        code_src = get_code_source(identifier, namespace=namespace)
+
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(code_src)
 
     values['version'] = code_src.version + 1
 
@@ -800,7 +876,24 @@ def create_dynamic_action_definition(values, session=None):
 @b.session_aware()
 def update_dynamic_action_definition(identifier, values, namespace='',
                                      session=None):
-    action_def = get_dynamic_action_definition(identifier, namespace=namespace)
+    # If several projects have a dynamic action with the same name, update
+    # the one of the current project. See
+    # create_or_update_workflow_definition().
+    action_def = _get_db_object_by_name_namespace_and_project(
+        models.DynamicActionDefinition,
+        identifier,
+        namespace,
+        security.get_project_id()
+    )
+
+    if not action_def:
+        action_def = get_dynamic_action_definition(
+            identifier,
+            namespace=namespace
+        )
+
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(action_def)
 
     action_def.update(values.copy())
 
@@ -939,7 +1032,23 @@ def create_action_definition(values, session=None):
 @b.session_aware()
 def update_action_definition(identifier, values, session=None):
     namespace = values.get('namespace', '')
-    a_def = get_action_definition(identifier, namespace=namespace)
+
+    # If several projects have an action definition with the same name,
+    # update the one of the current project, not an arbitrary one.
+    a_def = _get_db_object_by_name_namespace_and_project(
+        models.ActionDefinition,
+        identifier,
+        namespace,
+        security.get_project_id()
+    )
+
+    if not a_def:
+        a_def = get_action_definition(identifier, namespace=namespace)
+
+    # The check requires an authentication context, which internal
+    # maintenance calls (e.g. 'mistral-db-manage populate') don't have.
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(a_def)
 
     a_def.update(values.copy())
 
@@ -948,14 +1057,20 @@ def update_action_definition(identifier, values, session=None):
 
 @b.session_aware()
 def create_or_update_action_definition(name, values, session=None):
-    namespace = values.get('namespace', '')
-    if not _get_db_object_by_name_and_namespace(
-            models.ActionDefinition,
-            name,
-            namespace=namespace):
-        return create_action_definition(values)
-    else:
-        return update_action_definition(name, values)
+    # NOTE(amorin): The object to update must be looked up by the same
+    # unique key (name, namespace, project id) the write would produce.
+    # See the comment in create_or_update_workflow_definition().
+    a_def = _get_db_object_by_name_namespace_and_project(
+        models.ActionDefinition,
+        name,
+        values.get('namespace', ''),
+        security.get_project_id()
+    )
+
+    if a_def:
+        return update_action_definition(a_def.id, values)
+
+    return create_action_definition(values)
 
 
 @b.session_aware()
@@ -1957,6 +2072,10 @@ def create_cron_trigger(values, session=None):
 
 @b.session_aware()
 def update_cron_trigger(identifier, values, session=None, query_filter=None):
+    # NOTE: no cross-project guard here on purpose. This is called by the
+    # periodic scheduler (mistral.services.periodic), which legitimately
+    # updates the next-execution bookkeeping of cron triggers across all
+    # projects. The cron trigger REST API exposes no update operation.
     cron_trigger = get_cron_trigger(identifier)
 
     if query_filter:
@@ -1990,9 +2109,14 @@ def update_cron_trigger(identifier, values, session=None, query_filter=None):
 
 @b.session_aware()
 def create_or_update_cron_trigger(identifier, values, session=None):
-    cron_trigger = _get_db_object_by_name_and_namespace_or_id(
+    # Resolve within the caller's own project so that, when several projects
+    # have a cron trigger with the same name, the caller's own one is updated
+    # rather than another project's. See
+    # create_or_update_workflow_definition().
+    cron_trigger = _get_db_object_by_name_and_project(
         models.CronTrigger,
-        identifier
+        identifier,
+        security.get_project_id()
     )
 
     if not cron_trigger:
@@ -2064,7 +2188,20 @@ def create_environment(values, session=None):
 
 @b.session_aware()
 def update_environment(name, values, session=None):
-    env = get_environment(name)
+    # If several projects have an environment with the same name, update the
+    # one of the current project, not a public one of another project. See
+    # the comment in create_or_update_workflow_definition().
+    env = _get_db_object_by_name_and_project(
+        models.Environment,
+        name,
+        security.get_project_id()
+    )
+
+    if not env:
+        env = get_environment(name)
+
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(env)
 
     env.update(values)
 
@@ -2073,7 +2210,8 @@ def update_environment(name, values, session=None):
 
 @b.session_aware()
 def create_or_update_environment(name, values, session=None):
-    env = _get_db_object_by_name(models.Environment, name)
+    env = _get_db_object_by_name_and_project(
+        models.Environment, name, security.get_project_id())
 
     if not env:
         return create_environment(values)

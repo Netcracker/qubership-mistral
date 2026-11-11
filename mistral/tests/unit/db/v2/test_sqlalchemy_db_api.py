@@ -162,6 +162,56 @@ class WorkbookTest(SQLAlchemyTest):
         self.assertEqual(updated, fetched)
         self.assertIsNotNone(fetched.updated_at)
 
+    def test_update_other_project_workbook(self):
+        # A public workbook owned by another project.
+        auth_context.set_ctx(USER_CTX)
+
+        created = db_api.create_workbook(WORKBOOKS[0])
+
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        self.assertRaises(
+            exc.NotAllowedException,
+            db_api.update_workbook,
+            created.name,
+            {'definition': 'my new definition', 'namespace': 'test'}
+        )
+
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_workbook(created.name, namespace='test')
+
+        self.assertEqual('empty', fetched.definition)
+
+    def test_update_workbook_prefers_own_project(self):
+        # Same-named public workbook in another project.
+        auth_context.set_ctx(USER_CTX)
+
+        other = db_api.create_workbook(WORKBOOKS[0])
+
+        # This project has its own workbook with the same name.
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        mine = db_api.create_workbook(WORKBOOKS[0])
+
+        self.assertNotEqual(other.id, mine.id)
+
+        updated = db_api.update_workbook(
+            mine.name,
+            {'definition': 'my new definition', 'namespace': 'test'}
+        )
+
+        self.assertEqual(mine.id, updated.id)
+        self.assertEqual('my new definition', updated.definition)
+
+        # The other project's workbook must be intact.
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_workbook(other.name, namespace='test')
+
+        self.assertEqual(other.id, fetched.id)
+        self.assertEqual('empty', fetched.definition)
+
     def test_create_or_update_workbook(self):
         name = WORKBOOKS[0]['name']
         namespace = WORKBOOKS[0]['namespace']
@@ -875,6 +925,47 @@ class WorkflowDefinitionTest(SQLAlchemyTest):
 
         self.assertEqual(updated, fetched)
 
+    def test_create_or_update_workflow_definition_in_other_project(self):
+        # Create a workflow definition in another project.
+        auth_context.set_ctx(USER_CTX)
+
+        other = db_api.create_workflow_definition(WF_DEFINITIONS[1])
+
+        # Create a workflow definition with the same name in this project.
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        created = db_api.create_or_update_workflow_definition(
+            other.name,
+            copy.deepcopy(WF_DEFINITIONS[1])
+        )
+
+        self.assertNotEqual(other.id, created.id)
+        self.assertNotEqual(other.project_id, created.project_id)
+
+        # An admin sees the objects of all projects but a create-or-update
+        # request must only ever touch the object of its own project, not
+        # the one of another project that happens to have the same name.
+        auth_context.set_ctx(test_base.get_context(admin=True))
+
+        values = copy.deepcopy(WF_DEFINITIONS[1])
+        values['definition'] = 'my new definition'
+
+        updated = db_api.create_or_update_workflow_definition(
+            created.name,
+            values
+        )
+
+        self.assertEqual(created.id, updated.id)
+        self.assertEqual('my new definition', updated.definition)
+
+        # The workflow definition of the other project must be intact.
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_workflow_definition(other.id)
+
+        self.assertEqual(other.project_id, fetched.project_id)
+        self.assertEqual('empty', fetched.definition)
+
     def test_update_wf_scope_cron_trigger_associated_in_diff_tenant(self):
         created = db_api.create_workflow_definition(WF_DEFINITIONS[0])
 
@@ -1331,7 +1422,7 @@ class ActionDefinitionTest(SQLAlchemyTest):
         self.assertEqual(3, len(fetched))
 
     def test_update_action_definition_with_name(self):
-        created = db_api.create_action_definition(ACTION_DEFINITIONS[0])
+        created = db_api.create_action_definition(ACTION_DEFINITIONS[2])
 
         self.assertIsNone(created.updated_at)
 
@@ -1348,7 +1439,7 @@ class ActionDefinitionTest(SQLAlchemyTest):
         self.assertIsNotNone(fetched.updated_at)
 
     def test_update_action_definition_with_uuid(self):
-        created = db_api.create_action_definition(ACTION_DEFINITIONS[0])
+        created = db_api.create_action_definition(ACTION_DEFINITIONS[2])
 
         self.assertIsNone(created.updated_at)
 
@@ -1363,6 +1454,78 @@ class ActionDefinitionTest(SQLAlchemyTest):
 
         self.assertEqual(updated, fetched)
 
+    def test_update_other_project_action_definition(self):
+        values = copy.deepcopy(ACTION_DEFINITIONS[2])
+        values['scope'] = 'public'
+
+        created = db_api.create_action_definition(values)
+
+        # Switch to another project.
+        auth_context.set_ctx(USER_CTX)
+
+        self.assertRaises(
+            exc.NotAllowedException,
+            db_api.update_action_definition,
+            created.name,
+            {'description': 'my new desc'}
+        )
+
+    def test_update_other_project_action_definition_by_admin(self):
+        created = db_api.create_action_definition(ACTION_DEFINITIONS[2])
+
+        # Switch to admin in another project.
+        auth_context.set_ctx(ADM_CTX)
+
+        updated = db_api.update_action_definition(
+            created.id,
+            {'description': 'my new desc'}
+        )
+
+        self.assertEqual('my new desc', updated.description)
+
+    def test_update_system_action_definition(self):
+        created = db_api.create_action_definition(ACTION_DEFINITIONS[0])
+
+        self.assertRaises(
+            exc.InvalidActionException,
+            db_api.update_action_definition,
+            created.name,
+            {'description': 'my new desc'}
+        )
+
+    def test_update_action_definition_with_same_name_in_other_project(self):
+        # Create a public action definition in another project.
+        auth_context.set_ctx(USER_CTX)
+
+        values = copy.deepcopy(ACTION_DEFINITIONS[2])
+        values['scope'] = 'public'
+
+        other = db_api.create_action_definition(values)
+
+        # Create an action definition with the same name in this project.
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        created = db_api.create_action_definition(
+            copy.deepcopy(ACTION_DEFINITIONS[2])
+        )
+
+        # The update must touch the action definition of the current
+        # project, not the one of another project with the same name.
+        updated = db_api.update_action_definition(
+            created.name,
+            {'description': 'my new desc'}
+        )
+
+        self.assertEqual(created.id, updated.id)
+        self.assertEqual('my new desc', updated.description)
+
+        # The action definition of the other project must be intact.
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_action_definition(other.id)
+
+        self.assertEqual('Action #3', fetched.description)
+
     def test_create_or_update_action_definition(self):
         name = 'not-existing-id'
 
@@ -1370,7 +1533,7 @@ class ActionDefinitionTest(SQLAlchemyTest):
 
         created = db_api.create_or_update_action_definition(
             name,
-            ACTION_DEFINITIONS[0]
+            ACTION_DEFINITIONS[2]
         )
 
         self.assertIsNotNone(created)
@@ -1390,6 +1553,47 @@ class ActionDefinitionTest(SQLAlchemyTest):
         fetched = db_api.get_action_definition(created.name)
 
         self.assertEqual(updated, fetched)
+
+    def test_create_or_update_action_definition_in_other_project(self):
+        # Create an action definition in another project.
+        auth_context.set_ctx(USER_CTX)
+
+        other = db_api.create_action_definition(ACTION_DEFINITIONS[2])
+
+        # Create an action definition with the same name in this project.
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        created = db_api.create_or_update_action_definition(
+            other.name,
+            copy.deepcopy(ACTION_DEFINITIONS[2])
+        )
+
+        self.assertNotEqual(other.id, created.id)
+        self.assertNotEqual(other.project_id, created.project_id)
+
+        # An admin sees the objects of all projects but a create-or-update
+        # request must only ever touch the object of its own project, not
+        # the one of another project that happens to have the same name.
+        auth_context.set_ctx(test_base.get_context(admin=True))
+
+        values = copy.deepcopy(ACTION_DEFINITIONS[2])
+        values['description'] = 'my new desc'
+
+        updated = db_api.create_or_update_action_definition(
+            created.name,
+            values
+        )
+
+        self.assertEqual(created.id, updated.id)
+        self.assertEqual('my new desc', updated.description)
+
+        # The action definition of the other project must be intact.
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_action_definition(other.id)
+
+        self.assertEqual(other.project_id, fetched.project_id)
+        self.assertEqual('Action #3', fetched.description)
 
     def test_get_action_definitions(self):
         created0 = db_api.create_action_definition(ACTION_DEFINITIONS[0])
@@ -2601,6 +2805,38 @@ class CronTriggerTest(SQLAlchemyTest):
 
         self.assertEqual(updated, fetched)
 
+    def test_create_or_update_cron_trigger_prefers_own_project(self):
+        # A public cron trigger owned by another project.
+        auth_context.set_ctx(USER_CTX)
+
+        other_vals = copy.deepcopy(CRON_TRIGGERS[0])
+        other_vals['id'] = 'aaaaaaaa-1111-1111-1111-111111111111'
+        other_vals['scope'] = 'public'
+        other_vals['workflow_id'] = self.wf.id
+        other = db_api.create_cron_trigger(other_vals)
+
+        # This project has no cron trigger with that name.
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        my_vals = copy.deepcopy(CRON_TRIGGERS[0])
+        my_vals['id'] = 'bbbbbbbb-2222-2222-2222-222222222222'
+        my_vals['workflow_id'] = self.wf.id
+        my_vals['remaining_executions'] = 7
+
+        result = db_api.create_or_update_cron_trigger('trigger1', my_vals)
+
+        # A new trigger must be created in this project, not the other
+        # project's public trigger updated/stolen.
+        self.assertNotEqual(other.id, result.id)
+        self.assertNotEqual(other.project_id, result.project_id)
+
+        # The other project's trigger must be intact.
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_cron_trigger_by_id(other.id)
+
+        self.assertEqual(42, fetched.remaining_executions)
+
     def test_get_cron_triggers(self):
         created0 = db_api.create_cron_trigger(CRON_TRIGGERS[0])
         created1 = db_api.create_cron_trigger(CRON_TRIGGERS[1])
@@ -2815,6 +3051,107 @@ class ScheduledJobTest(SQLAlchemyTest):
         self.assertEqual(0, res)
 
 
+CODE_SOURCES = [
+    {
+        'name': 'cs1',
+        'content': 'def f():\n    return 1\n',
+        'version': 1,
+        'namespace': '',
+        'scope': 'public',
+        'tags': []
+    }
+]
+
+
+class CodeSourceTest(SQLAlchemyTest):
+    def setUp(self):
+        super(CodeSourceTest, self).setUp()
+
+        db_api.delete_code_sources()
+
+    def test_update_code_source_prefers_own_project(self):
+        # Same-named public code source in another project.
+        auth_context.set_ctx(USER_CTX)
+
+        other = db_api.create_code_source(copy.deepcopy(CODE_SOURCES[0]))
+
+        # This project has its own code source with the same name.
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        mine = db_api.create_code_source(copy.deepcopy(CODE_SOURCES[0]))
+
+        self.assertNotEqual(other.id, mine.id)
+
+        updated = db_api.update_code_source(
+            'cs1',
+            {'content': 'def f():\n    return 2\n'}
+        )
+
+        self.assertEqual(mine.id, updated.id)
+
+        # The other project's code source must be intact.
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_code_source(other.id)
+
+        self.assertEqual('def f():\n    return 1\n', fetched.content)
+
+
+DYNAMIC_ACTIONS = [
+    {
+        'name': 'dyn1',
+        'class_name': 'MyClass',
+        'namespace': '',
+        'scope': 'public'
+    }
+]
+
+
+class DynamicActionDefinitionTest(SQLAlchemyTest):
+    def setUp(self):
+        super(DynamicActionDefinitionTest, self).setUp()
+
+        db_api.delete_dynamic_action_definitions()
+        db_api.delete_code_sources()
+
+    def _create_dyn_action(self):
+        code_src = db_api.create_code_source(copy.deepcopy(CODE_SOURCES[0]))
+
+        values = copy.deepcopy(DYNAMIC_ACTIONS[0])
+        values['code_source_id'] = code_src.id
+        values['code_source_name'] = code_src.name
+
+        return db_api.create_dynamic_action_definition(values)
+
+    def test_update_dynamic_action_prefers_own_project(self):
+        # Same-named public dynamic action in another project.
+        auth_context.set_ctx(USER_CTX)
+
+        other = self._create_dyn_action()
+
+        # This project has its own dynamic action with the same name.
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        mine = self._create_dyn_action()
+
+        self.assertNotEqual(other.id, mine.id)
+
+        updated = db_api.update_dynamic_action_definition(
+            'dyn1',
+            {'class_name': 'UpdatedClass'}
+        )
+
+        self.assertEqual(mine.id, updated.id)
+        self.assertEqual('UpdatedClass', updated.class_name)
+
+        # The other project's dynamic action must be intact.
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_dynamic_action_definition(other.id)
+
+        self.assertEqual('MyClass', fetched.class_name)
+
+
 ENVIRONMENTS = [
     {
         'name': 'env1',
@@ -2888,6 +3225,56 @@ class EnvironmentTest(SQLAlchemyTest):
 
         self.assertEqual(updated, fetched)
         self.assertIsNotNone(fetched.updated_at)
+
+    def test_update_other_project_environment(self):
+        # A public environment owned by another project.
+        auth_context.set_ctx(USER_CTX)
+
+        created = db_api.create_environment(ENVIRONMENTS[1])
+
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        self.assertRaises(
+            exc.NotAllowedException,
+            db_api.update_environment,
+            created.name,
+            {'description': 'my new desc'}
+        )
+
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_environment(created.name)
+
+        self.assertEqual('Test Environment #2', fetched.description)
+
+    def test_update_environment_prefers_own_project(self):
+        # Same-named public environment in another project.
+        auth_context.set_ctx(USER_CTX)
+
+        other = db_api.create_environment(ENVIRONMENTS[1])
+
+        # This project has its own environment with the same name.
+        auth_context.set_ctx(DEFAULT_CTX)
+
+        mine = db_api.create_environment(ENVIRONMENTS[1])
+
+        self.assertNotEqual(other.id, mine.id)
+
+        updated = db_api.update_environment(
+            mine.name,
+            {'description': 'my new desc'}
+        )
+
+        self.assertEqual(mine.id, updated.id)
+        self.assertEqual('my new desc', updated.description)
+
+        # The other project's environment must be intact.
+        auth_context.set_ctx(USER_CTX)
+
+        fetched = db_api.get_environment(other.name)
+
+        self.assertEqual(other.id, fetched.id)
+        self.assertEqual('Test Environment #2', fetched.description)
 
     def test_create_or_update_environment(self):
         name = 'not-existing-id'
