@@ -1,0 +1,10 @@
+# Policy overrides shipped with the image (see [oslo_policy] policy_file in
+# oob_mistral_temp.conf). Everything else keeps the upstream in-code defaults.
+#
+# Allow the maintenance endpoints (GET/PUT /maintenance) for any caller that
+# gets past authentication, regardless of the AUTH_ENABLE setting. Upstream
+# Mistral 22 makes them admin-only, which breaks callers (DR / maintenance
+# tooling, robot tests) on deployments without authentication, where nobody
+# can have the admin role.
+"maintenance:get": ""
+"maintenance:update": ""
