@@ -13,12 +13,23 @@
   "baseBranchPatterns": [
     "main"
   ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "tests/custom-actions/**"
+  ],
   "packageRules": [
     {
       "description": ["Skip our own images in Helm chart values: the release pipeline rewrites their tags and cannot handle pinned digests"],
       "matchManagers": ["helm-values"],
       "matchPackageNames": ["ghcr.io/netcracker/**"],
       "enabled": false
+    },
+    {
+      "description": ["Keep official python Docker images on 3.10.x"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["python"],
+      "allowedVersions": "/^3\\.10([.-]|$)/"
     }
   ]
 }
