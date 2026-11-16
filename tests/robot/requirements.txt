@@ -7,7 +7,7 @@ PyYAML
 psycopg2-binary
 # dictdiffer>=0.7.1
 openshift
-kubernetes<36
+kubernetes<38
 aiohttp
 tabulate
 google-auth<2.62.2
