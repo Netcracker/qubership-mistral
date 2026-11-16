@@ -1,4 +1,4 @@
-FROM python:3.10.21-alpine3.24@sha256:8d62622e4ad0e5adfd01efecd25a0a5ea571a22aaaeff481796ce10828d46504 AS wheelhouse
+FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3 AS wheelhouse
 
 RUN python --version && pip --version
 
@@ -7,7 +7,7 @@ COPY build/requirements.txt requirements.txt
 RUN pip install --no-cache-dir --upgrade pip==25.3 wheel && \
     pip wheel --no-cache-dir -r requirements.txt    -w /wheels
 
-FROM python:3.10.21-alpine3.24@sha256:8d62622e4ad0e5adfd01efecd25a0a5ea571a22aaaeff481796ce10828d46504
+FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
 
 ENV WORKDIR=/opt/operator/ \
     USER_UID=1001 \

@@ -1,4 +1,4 @@
-FROM python:3.10.21-alpine3.24@sha256:8d62622e4ad0e5adfd01efecd25a0a5ea571a22aaaeff481796ce10828d46504
+FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
 
 WORKDIR /app
 RUN echo 'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/' > /etc/apk/repositories && \
