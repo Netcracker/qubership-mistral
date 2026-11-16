@@ -23,6 +23,6 @@ setup(
         'Programming Language:: Python:: 3.6'
     ],
     setup_requires=[
-        'setuptools==84.1.0'
+        'setuptools==84.2.1'
     ],
 )
