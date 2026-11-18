@@ -51,6 +51,13 @@ class IsolationLevelTest(base.BaseTest):
             isolation_level='READ COMMITTED'
         )
 
+    def test_postgresql_gets_read_committed(self):
+        engine = self._create_facade('postgresql')
+
+        engine.update_execution_options.assert_called_once_with(
+            isolation_level='READ COMMITTED'
+        )
+
     def test_sqlite_keeps_default_isolation(self):
         engine = self._create_facade('sqlite')
 
