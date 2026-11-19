@@ -27,7 +27,7 @@ from kubernetes.client import V1ObjectMeta, V1EnvVar, V1Container, V1PodSpec, \
     V1ProjectedVolumeSource, V1VolumeProjection, V1ServiceAccountTokenProjection
 
 import mistral_constants as MC
-from rabbitmq_helper import RabbitMQHelper
+from rabbitmq_helper import ExchangeDeleteError, RabbitMQHelper
 from dbaas_helper import DBaaSHelper
 
 logging.basicConfig(
@@ -3178,7 +3178,18 @@ class KubernetesHelper:
 
     def delete_existing_queues(self):
         rq_helper = self.get_rmq_helper()
-        rq_helper.delete_existing_queues()
+        try:
+            rq_helper.delete_existing_queues()
+        except ExchangeDeleteError as e:
+            logger.error("Deployment failed: %s", e)
+            self.update_status(
+                MC.Status.FAILED,
+                "Error",
+                f"RabbitMQ openstack exchange delete failed: {e}"
+            )
+            sleep(5)
+            raise kopf.PermanentError(
+                f"RabbitMQ openstack exchange delete failed: {e}")
 
     def check_if_rmq_exchange_durable(self):
         rq_helper = self.get_rmq_helper()
