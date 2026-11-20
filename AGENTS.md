@@ -1,173 +1,114 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to agents when working with code in this repository.
 
-## What is Qubership Mistral
+## What This Project Is
 
-Qubership Mistral is a distributed workflow management and execution service, forked from OpenStack Mistral by NetCracker Technology Corp. It lets users define tasks and workflows in YAML and executes them in a distributed, HA environment. Workflows are written using YAQL (`<% %>`) or Jinja2 (`{{ }}`) expressions.
+Qubership Mistral is a workflow engine forked from OpenStack Mistral. Workflows are YAML (YAQL `<% %>` or Jinja2
+`{{ }}`). The repository ships two things:
 
-## Architecture
+1. **Mistral services** (Python): `api`, `engine`, `executor`, `notifier`(all started by
+   `mistral-server`) and `monitoring` (started by `mistral-monitoring`).
+2. **`operator/`**: a [Kopf](https://kopf.readthedocs.io/) Kubernetes operator (`netcracker.com/v2` `MistralService`)
+   that deploys the services and runs the DB jobs.
 
-Mistral is a multi-process system where all inter-component communication goes through a message broker (RabbitMQ or Kafka). The components:
 
-```
-User/API Client
-      │ HTTP REST
-      ▼
-  API Server (mistral/api/)          ← Pecan WSGI, read-only DB, sends RPC to Engine
-      │ RPC
-      ▼
-  Engine (mistral/engine/)           ← Core orchestration: workflow state machine, task scheduling
-      │ RPC / message queue
-      ├──▶ Executor (mistral/executors/)     ← Runs actions; no DB access
-      ├──▶ Notifier (mistral/notifiers/)     ← Event webhooks/Kafka; no DB access
-      └──▶ Monitoring (mistral/monitoring/)  ← Prometheus metrics + recovery jobs (FastAPI)
-```
-
-Key constraints:
-- **Engine is the only component that writes to the database** (PostgreSQL via SQLAlchemy + Alembic)
-- Executor and Notifier have no DB access — they communicate results back to Engine via RPC
-- **Scheduler** (`mistral/scheduler/`) manages cron triggers, integrated into Engine process
-- **Event Engine** (`mistral/event_engine/`) handles event-driven workflow triggers
-- **Recovery jobs** in `mistral/monitoring/jobs/` detect and heal broken executions (delayed calls, idle tasks, named locks, waiting tasks, subworkflows)
-- All components are horizontally scalable via distributed locking
-
-### Plugin Architecture
-
-Most subsystems are pluggable via setuptools entry points (defined in `setup.cfg`):
-
-| Entry point | Implementations |
-|-------------|-----------------|
-| `mistral.rpc.backends` | oslo (default), kombu |
-| `mistral.executors` | remote (default), local |
-| `mistral.expression.evaluators` | yaql, jinja2 |
-| `mistral.auth` | keystone, keycloak |
-| `mistral.schedulers` | default, legacy |
-| `monitoring.recovery_jobs` | registered recovery job implementations |
-
-### Key Source Directories
+## Repository Structure
 
 | Path | Purpose |
 |------|---------|
-| `mistral/api/` | REST API controllers (Pecan) |
-| `mistral/engine/` | Core orchestration, workflow state machine |
-| `mistral/executors/` | Action execution |
-| `mistral/notifiers/` | Event notification publishers |
-| `mistral/monitoring/` | Metrics (FastAPI/Uvicorn) + recovery jobs |
-| `mistral/scheduler/` | Cron trigger management |
-| `mistral/event_engine/` | Event-driven execution |
-| `mistral/actions/` | Built-in action implementations (HTTP, SSH, etc.) |
-| `mistral/expressions/` | YAQL and Jinja2 evaluators |
-| `mistral/db/sqlalchemy/` | ORM models + Alembic migrations |
-| `mistral/rpc/` | Message broker abstraction (oslo/kombu) |
-| `mistral/workflow/` | Workflow/task definitions, data flow, state machine |
-| `mistral/auth/` | Keystone and Keycloak auth handlers |
-| `mistral/cmd/launch.py` | Main entry point (`mistral-server`) |
-| `mistral/config.py` | All configuration options and defaults |
+| `mistral/api/` | REST API controllers (Pecan, `controllers/v2/`) |
+| `mistral/engine/`, `mistral/workflow/` | Orchestration, task scheduling, workflow state machine |
+| `mistral/executors/`, `mistral/notifiers/` | Action execution; event publishing |
+| `mistral/services/`, `mistral/scheduler/`, `mistral/event_engine/` | Core services, cron triggers, event triggers |
+| `mistral/actions/`, `mistral/expressions/` | Built-in actions; YAQL/Jinja evaluators |
+| `mistral/monitoring/` | Prometheus metrics (FastAPI) and `jobs/` recovery jobs |
+| `mistral/config.py`, `mistral/policies/` | All config options and defaults; RBAC policy rules |
+| `mistral/db/sqlalchemy/` | ORM models, `migration/` (upstream Alembic), `nc_migration/` (NetCracker Alembic) |
+| `mistral/tests/unit/` | Unit tests (stestr, see `.stestr.conf`) |
+| `operator/src/`, `operator/src/tests/` | Operator code (`handler.py`) and its pytest tests |
+| `operator/deployments/charts/mistral-operator/` | Helm chart: `crds/crd.yaml`, `templates/`, `values.yaml`, `values.schema.json` |
+| `operator/deploy/` | Plain-YAML install set (legacy; its `crd.yaml` is a stub, see Compatibility) |
+| `tests/robot/`, `tests/custom-actions/` | Robot Framework E2E suite and custom-action test images |
+| `releasenotes/notes/`, `doc/source/`, `custom_doc/` | Reno notes, Sphinx docs, user docs |
+| `agent-packages/` | APM packages for agent skills (see Generated Code) |
 
-## Kubernetes Operator
+## Compatibility Rules
 
-The `operator/` directory contains a [Kopf](https://kopf.readthedocs.io/)-based Kubernetes operator that manages the full lifecycle of Mistral in Kubernetes.
+These contracts must not break. Before editing any of them, run the check listed; if it shows a break, **stop and ask
+a human** with the diff and a migration plan. Do not implement the break.
 
-### Custom Resource
+- **REST API** (`mistral/api/controllers/v2/`): never remove or rename a route, field or status code. Check:
+  `git diff origin/main -- mistral/api | grep -E '^-\s+@(pecan\.expose|wsme_pecan\.wsexpose)'` must print nothing.
+  Never edit existing assertions in `mistral/tests/unit/api/` to make them pass.
+- **Policy names** (`mistral/policies/`): never rename or remove a rule. Check:
+  `git diff origin/main -- mistral/policies | grep -E '^-\s+name='` must print nothing.
+- **Config options** (`mistral/config.py`): never rename or remove an option or change a default. Adding is fine.
+- **Helm values** (`values.yaml`): never remove or rename a key; a new key needs a matching entry in
+  `values.schema.json`. Check: `helm template mistral-operator operator/deployments/charts/mistral-operator`
+  exits 0 with default values.
+- **CRD** `operator/deployments/charts/mistral-operator/crds/crd.yaml` (version `v2`) is the source of truth. Never
+  remove or tighten a field in `spec`. `operator/deploy/crd.yaml` is a 15-line `v1` stub; do not copy the chart CRD
+  into it and do not edit it without asking.
+- **DB migrations**: never edit, renumber or delete an existing file under `.../versions/`. Add a new one (next
+  number after `044_*.py` upstream; Alembic hash for `nc_migration`). Destructive changes (drop table/column, type
+  narrowing) need human approval. Migrations must work on SQLite (tests) and PostgreSQL (production).
+- **Standard workflows/actions** in `mistral/resources/`: never rename or remove one.
 
-- **API:** `netcracker.com/v2`, Kind: `MistralService` (short names: `mistral`, `mistrals`)
-- CRD: `operator/deploy/crd.yaml` and `operator/deployments/charts/mistral-operator/crds/crd.yaml`
+## Guardrails
 
-### Operator Components (run as sidecars in the operator pod)
+- Credentials come from Kubernetes secrets or config volumes; never log, print or hard-code
+  them in CRs, manifests, defaults or tests.
+- Never change workflow/task execution state outside `mistral/engine/` and `mistral/workflow/`.
+- Never hand-edit files under `agent-packages/**/references/` and `doc/source/**`(upstream docs).
+- Never commit `.tox/`, `.venv*/`, `.stestr/`, `*.sqlite`, `mistral.log`, `cover/`, `doc/build/`, `etc/*.sample` that
+  are generated. Run `git status` before staging; only intended files may be listed.
+- Never bump a dependency by hand (Renovate does it); never change pins in `nc_requirements.txt` without asking.
 
-| Container | Purpose |
-|-----------|---------|
-| `mistral-operator` | Main Kopf reconciliation loop — creates/updates/deletes 5 Mistral deployments |
-| `mistral-disaster-recovery` | DR daemon for active/standby/disable mode switchover |
-| `bluegreen-agent` | FastAPI service on port 8000 for zero-downtime blue-green migration |
+## Generated Code
 
-### Operator Reconciliation (operator/src/handler.py)
+Never edit these by hand. Change the source, regenerate, and commit the result when it is tracked.
 
-- **on.create** — validates secret, creates RabbitMQ vhosts/credentials, runs DB migration job, deploys all 5 services
-- **on.update** — re-runs migrations, updates all service deployments; respects `operatorId` field to support multiple operator instances in the same cluster
-- **on.delete** — removes all deployments, secrets, and config maps
-- **on.field (disasterRecovery.mode)** — scales down (standby/disable) or runs DR job + scales up (active)
+| Generated file | Source | Command | Tracked |
+|----------------|--------|---------|---------|
+| `etc/mistral.conf.sample` | `mistral/config.py` | `tox -e genconfig` | no (git-ignored) |
+| `etc/policy.yaml.sample` | `mistral/policies/` | `tox -e genpolicy` | no (do not commit) |
+| `.agents/`, `.claude/`, `.cursor/`, `.github/instructions/` | `agent-packages/**/.apm/`, `apm.yml` | `apm install` | yes |
+| `agent-packages/**/references/` | `custom_doc/troubleshooting.md` | edit the source; CI workflow `sync-troubleshooting-skill.yml` copies it | yes |
 
-### Blue-Green Deployments (operator/bluegreen-agent/)
+- After `apm install`, `git status` must list only files under the paths above. If `apm install` fails for any
+  reason (hash mismatch, "no trustworthy local deployment baseline"), stop and ask a human.
 
-**Deprecated**. The agent migrates workflow definitions between namespaces (blue→green) without downtime:
-- `POST /api/bluegreen/warmup` — clones all workflows from source namespace to target (inserts new UUIDs into `workflow_definitions_v2`)
-- `POST /api/bluegreen/commit` — deletes all workflows from the old namespace
+## Test Changes
 
-### HA Mechanisms
-
-- **Pod anti-affinity** — preferred spread across nodes for each service
-- **HPA** — `autoscaling/v2` on CPU (default 85%), configurable via `HPA_*` values; disabled by default
-- **PodDisruptionBudget** — optional, protects against node drains; disabled by default
-- **DR mode** — active/standby failover managed by SiteManager integration
-- **Multi-operator coordination** — each operator instance has an `OPERATOR_ID`; update handler skips CR if `operatorId` doesn't match
-
-### Helm Chart (operator/deployments/charts/mistral-operator/)
-
-Key `values.yaml` sections:
-- `mistralCommonParams` — DB host/port, RabbitMQ, Kafka, auth settings
-- `mistralApi/Engine/Executor/Notifier/Monitoring` — replicas, resources, affinity per service
-- `disasterRecovery` — DR mode, image, timeout
-- `bluegreenAgent` — enable/disable, image
-- `mistral.tls` — TLS for all service connections (API, monitoring, PostgreSQL, RabbitMQ, Kafka)
-- `secrets` — DB, RabbitMQ, Kafka, IDP credentials (passed as Kubernetes Secret)
-
-## Commands
-
-### Testing
-
-```bash
-tox -e py3                     # Unit tests
-tox -e unit-postgresql         # Unit tests with PostgreSQL
-tox -e unit-sqlite             # Unit tests with SQLite
-tox -e pep8                    # Lint (flake8 + doc8)
-tox                            # Full suite (py3 + pep8)
-tox -e cover                   # Coverage report
-```
-
-Run a single test:
-```bash
-stestr run tests/unit/path/to/test_file.py
-stestr run -- tests/unit/path/to/test_file.py::TestClass::test_method
-```
-
-### Development Setup
+Setup once. `tox -e py3` alone does not install `nc_requirements.txt`, but unit tests need `confluent-kafka` and
+`setuptools==81.0.0` from it, so use a venv (`psycopg2` needs libpq headers; if it fails to build, run
+`pip install psycopg2-binary`):
 
 ```bash
-pip install -r requirements.txt -r test-requirements.txt -r nc_requirements.txt
-python setup.py develop
+python3 -m venv .venv && . .venv/bin/activate
+PIP_NO_BUILD_ISOLATION=0 pip install -r requirements.txt -r test-requirements.txt -r nc_requirements.txt && PIP_NO_BUILD_ISOLATION=0 pip install -e .
 ```
 
-### Database Migrations
+Commands by trigger (all from the repo root, venv active):
 
-```bash
-mistral-db-manage --config-file mistral.conf upgrade
-```
+| After changing | Run | Pass condition |
+|----------------|-----|----------------|
+| any `mistral/**/*.py` | `bash tools/prepare_db.sh sqlite && stestr run` | exit 0, `Failed: 0` |
+| a single module (fast loop) | `stestr run mistral.tests.unit.workflow.test_states --concurrency 1` | exit 0 |
+| any `*.py` | `git diff --name-only --diff-filter=d origin/main -- '*.py' | xargs -r flake8` | no output |
+| `mistral/config.py` | `tox -e genconfig` then `PATH=$PWD/.tox/genconfig/bin:$PATH tools/config/check_uptodate.sh` | both exit 0 |
+| `mistral/policies/` | `tox -e genpolicy` | exit 0 |
+| `agent-packages/**` | `apm install` | exit 0 (see Generated Code) |
+| `operator/src/**` | `pip install -r operator/build/requirements.txt pytest && (cd operator/src && python -m pytest tests/)` | exit 0, no failures |
+| `operator/deployments/charts/**` | `ct lint --config .github/ct.yaml --target-branch main` and `helm template mistral-operator operator/deployments/charts/mistral-operator` | both exit 0 |
 
-### Running Services Locally
+Robot tests are at `tests/robot/**`.
 
-```bash
-# All components in one process
-mistral-server --server all --config-file mistral.conf
+## Definition of Done
 
-# Individual components
-mistral-server --server api|engine|executor|notifier|event-engine
-
-# Prometheus metrics service (port 9090)
-mistral-monitoring --config-file mistral.conf
-```
-
-### Docker
-
-```bash
-docker build -t qubership-mistral:latest .
-# Runtime: SERVER=all|api|engine|executor|notifier|event-engine|monitoring
-```
-
-### Config Generation
-
-```bash
-tox -e genconfig   # Generate sample mistral.conf
-tox -e genpolicy   # Generate sample policy.yaml
-```
+- [ ] `stestr run` shows `Failed: 0` for any change under `mistral/`
+- [ ] `flake8` on changed `.py` files prints nothing
+- [ ] Regeneration run for every trigger in "Generated Code"; no ignored/sample file staged
+- [ ] No Backward Compatibility check shows a break; no Prohibited Actions grep prints anything
+- [ ] Chart changes: `ct lint` and `helm template` exit 0; operator changes: `pytest` exit 0
