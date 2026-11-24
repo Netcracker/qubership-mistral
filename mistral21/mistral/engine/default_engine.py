@@ -1,0 +1,324 @@
+# Copyright 2013 - Mirantis, Inc.
+# Copyright 2015 - StackStorm, Inc.
+# Copyright 2016 - Brocade Communications Systems, Inc.
+# Copyright 2018 - Extreme Networks, Inc.
+# Copyright 2020 Nokia Software.
+# Modified in 2025 by NetCracker Technology Corp.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+import datetime
+from oslo_config import cfg
+from oslo_log import log as logging
+from osprofiler import profiler
+
+from mistral_lib import actions as ml_actions
+
+from mistral.db import utils as db_utils
+from mistral.db.v2 import api as db_api
+from mistral.db.v2.sqlalchemy import models as db_models
+from mistral.engine import action_handler
+from mistral.engine import base
+from mistral.engine import post_tx_queue
+from mistral.engine import task_handler
+from mistral.engine import workflow_handler as wf_handler
+from mistral import exceptions
+from mistral.workflow import states
+from mistral_lib import utils as u
+
+
+# Submodules of mistral.engine will throw NoSuchOptError if configuration
+# options required at top level of this  __init__.py are not imported before
+# the submodules are referenced.
+
+LOG = logging.getLogger(__name__)
+
+
+class DefaultEngine(base.Engine):
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    @profiler.trace('engine-start-workflow', hide_args=True)
+    def start_workflow(self, wf_identifier, wf_namespace='', wf_ex_id=None,
+                       wf_input=None, description='', async_=False, **params):
+        if wf_namespace:
+            params['namespace'] = wf_namespace
+
+        if cfg.CONF.notifier.notify:
+            if 'notify' not in params or not params['notify']:
+                params['notify'] = []
+
+            params['notify'].extend(cfg.CONF.notifier.notify)
+
+        try:
+            with db_api.transaction():
+                wf_ex = wf_handler.start_workflow(
+                    wf_identifier,
+                    wf_namespace,
+                    wf_ex_id,
+                    wf_input or {},
+                    description,
+                    params
+                )
+
+                if not wf_ex:
+                    return
+
+                # Checking a case when all tasks are completed immediately.
+                wf_handler.check_and_complete(wf_ex.id)
+
+                return wf_ex.get_clone()
+
+        except exceptions.DBDuplicateEntryError:
+            # NOTE(akovi): the workflow execution with a provided
+            # wf_ex_id may already exist. In this case, simply
+            # return the existing entity.
+            with db_api.transaction():
+                wf_ex = db_api.get_workflow_execution(wf_ex_id)
+
+                return wf_ex.get_clone()
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    @profiler.trace('engine-plan-workflow', hide_args=True)
+    def plan_workflow(self, wf_identifier, wf_namespace='', wf_ex_id=None,
+                      wf_input=None, description='', async_=False, **params):
+        if wf_namespace:
+            params['namespace'] = wf_namespace
+
+        if cfg.CONF.notifier.notify:
+            if 'notify' not in params or not params['notify']:
+                params['notify'] = []
+
+            params['notify'].extend(cfg.CONF.notifier.notify)
+
+        try:
+            with db_api.transaction():
+                wf_ex = wf_handler.plan_workflow(
+                    wf_identifier,
+                    wf_namespace,
+                    wf_ex_id,
+                    wf_input or {},
+                    description,
+                    params
+                )
+
+                if not wf_ex:
+                    return
+
+                # Checking a case when all tasks are completed immediately.
+                wf_handler.check_and_complete(wf_ex.id)
+
+                return wf_ex.get_clone()
+
+        except exceptions.DBDuplicateEntryError:
+            # NOTE(akovi): the workflow execution with a provided
+            # wf_ex_id may already exist. In this case, simply
+            # return the existing entity.
+            with db_api.transaction():
+                wf_ex = db_api.get_workflow_execution(wf_ex_id)
+
+                return wf_ex.get_clone()
+
+    @post_tx_queue.run
+    def start_task(self, task_ex_id, first_run, waiting,
+                   triggered_by, rerun, reset, **params):
+        with db_api.transaction():
+            task_handler.run_task(task_ex_id, waiting,
+                                  triggered_by, rerun, reset, first_run)
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    def start_action(self, action_name, action_input,
+                     description=None, namespace='', **params):
+        with db_api.transaction():
+            engine_action = action_handler.build_action_by_name(
+                action_name,
+                namespace=namespace
+            )
+
+            action_desc = engine_action.action_desc
+
+            action_desc.check_parameters(action_input)
+
+            sync = params.get('run_sync')
+            save = params.get('save_result')
+            target = params.get('target')
+            timeout = params.get('timeout')
+
+            action = action_desc.instantiate(action_input, {})
+
+            is_action_sync = action.is_sync()
+
+            if sync and not is_action_sync:
+                raise exceptions.InputException(
+                    "Action does not support synchronous execution.")
+
+            deadline = None if not timeout else (datetime.datetime.now() +
+                                                 datetime.timedelta(
+                                                     seconds=timeout)
+                                                 ).isoformat()
+
+            if not sync and (save or not is_action_sync):
+                engine_action.schedule(action_input, target, deadline=deadline)
+
+                return engine_action.action_ex.get_clone()
+
+            output = engine_action.run(
+                action_input,
+                target,
+                save=False,
+                deadline=deadline
+            )
+
+            state = states.SUCCESS if output.is_success() else states.ERROR
+
+            if not save:
+                # Action execution is not created but we need to return similar
+                # object to the client anyway.
+                return db_models.ActionExecution(
+                    name=action_name,
+                    description=description,
+                    input=action_input,
+                    output=output.to_dict(),
+                    state=state,
+                    workflow_namespace=namespace
+                )
+
+            action_ex_id = u.generate_unicode_uuid()
+
+            values = {
+                'id': action_ex_id,
+                'name': action_name,
+                'description': description,
+                'input': action_input,
+                'output': output.to_dict(),
+                'state': state,
+                'is_sync': is_action_sync,
+                'workflow_namespace': namespace
+            }
+
+            return db_api.create_action_execution(values)
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    @profiler.trace('engine-on-action-complete', hide_args=True)
+    def on_action_complete(self, action_ex_id, result, wf_action=False,
+                           async_=False):
+        with db_api.transaction():
+            if wf_action:
+                action_ex = db_api.get_workflow_execution(action_ex_id)
+                # If result is None it means that it's a normal subworkflow
+                # output and we just need to fetch it from the model.
+                # This is just an optimization to not send data over RPC
+                if result is None:
+                    result = ml_actions.Result(data=action_ex.output)
+            else:
+                action_ex = db_api.get_action_execution(action_ex_id)
+
+            action_handler.on_action_complete(action_ex, result)
+
+            return action_ex.get_clone()
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    @profiler.trace('engine-on-action-update', hide_args=True)
+    def on_action_update(self, action_ex_id, state, wf_action=False,
+                         async_=False):
+        with db_api.transaction():
+            if wf_action:
+                action_ex = db_api.get_workflow_execution(action_ex_id)
+            else:
+                action_ex = db_api.get_action_execution(action_ex_id)
+            action_handler.on_action_update(action_ex, state)
+
+            return action_ex.get_clone()
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    def pause_workflow(self, wf_ex_id):
+        with db_api.transaction():
+            wf_ex = db_api.get_workflow_execution(wf_ex_id)
+
+            wf_handler.pause_workflow(wf_ex)
+
+            return wf_ex.get_clone()
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    def rerun_workflow(self, task_ex_id, reset=True, skip=False, env=None):
+        with db_api.transaction():
+            task_ex = db_api.get_task_execution(task_ex_id)
+
+            wf_ex = task_ex.workflow_execution
+
+            wf_handler.rerun_workflow(
+                wf_ex,
+                task_ex,
+                reset=reset,
+                skip=skip,
+                env=env
+            )
+
+            return wf_ex.get_clone()
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    def resume_workflow(self, wf_ex_id, env=None):
+        with db_api.transaction():
+            wf_ex = db_api.get_workflow_execution(wf_ex_id)
+
+            wf_handler.resume_workflow(wf_ex, env=env)
+
+            return wf_ex.get_clone()
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    def update_wf_ex_to_read_only(self, wf_ex_id):
+        with db_api.transaction():
+            wf_ex = db_api.get_workflow_execution(wf_ex_id)
+
+            wf_handler.update_wf_ex_to_read_only(wf_ex)
+
+            return wf_ex.get_clone()
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    def stop_workflow(self, wf_ex_id, state, message=None,
+                      sync=True, force=False):
+        with db_api.transaction():
+            wf_ex = db_api.get_workflow_execution(wf_ex_id)
+
+            wf_handler.stop_workflow(wf_ex, state, message, sync, force)
+
+            return wf_ex.get_clone()
+
+    def rollback_workflow(self, wf_ex_id):
+        # TODO(rakhmerov): Implement.
+        raise NotImplementedError
+
+    @db_utils.retry_on_db_error
+    @post_tx_queue.run
+    def process_action_heartbeats(self, action_ex_ids):
+        with db_api.transaction():
+            for exec_id in action_ex_ids:
+                try:
+                    db_api.update_action_execution_heartbeat(exec_id)
+                except exceptions.DBEntityNotFoundError:
+                    LOG.debug(
+                        "Action execution heartbeat update failed. {}",
+                        exec_id,
+                        exc_info=True
+                    )
+                    # Ignore this error and continue with the
+                    # remaining ids.
+                    pass

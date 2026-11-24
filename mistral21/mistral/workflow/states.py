@@ -1,0 +1,145 @@
+# Copyright 2013 - Mirantis, Inc.
+# Copyright 2016 - Brocade Communications Systems, Inc.
+# Modified in 2025 by NetCracker Technology Corp.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+"""Valid task and workflow states."""
+
+IDLE = 'IDLE'
+"""Task is not started yet."""
+
+PLANNED = 'PLANNED'
+"""Workflow execution is created, but not started yet."""
+
+WAITING = 'WAITING'
+"""
+Task execution object has been created, but it is not ready to start because
+some preconditions are not met.
+NOTE:
+The task may never run just because some of the preconditions may never be met.
+"""
+
+RUNNING = 'RUNNING'
+"""Task, action or workflow is currently being executed."""
+
+RUNNING_DELAYED = 'DELAYED'
+"""Task is in the running state but temporarily delayed."""
+
+PAUSED = 'PAUSED'
+"""Task, action or workflow has been paused."""
+
+SUCCESS = 'SUCCESS'
+"""Task, action or workflow has finished successfully."""
+
+CANCELLED = 'CANCELLED'
+"""Task, action or workflow has been cancelled."""
+
+ERROR = 'ERROR'
+"""Task, action or workflow has finished with an error."""
+
+SKIPPED = 'SKIPPED'
+"""Task has been skipped."""
+
+_ALL = [
+    IDLE,
+    PLANNED,
+    WAITING,
+    RUNNING,
+    RUNNING_DELAYED,
+    PAUSED,
+    SUCCESS,
+    CANCELLED,
+    ERROR,
+    SKIPPED
+]
+
+_VALID_TRANSITIONS = {
+    IDLE: [RUNNING, ERROR, CANCELLED, PLANNED],
+    PLANNED: [RUNNING, ERROR, CANCELLED],
+    WAITING: [RUNNING],
+    RUNNING: [PAUSED, RUNNING_DELAYED, SUCCESS, ERROR, CANCELLED],
+    RUNNING_DELAYED: [RUNNING, ERROR, CANCELLED],
+    PAUSED: [RUNNING, ERROR, CANCELLED],
+    SUCCESS: [],
+    CANCELLED: [RUNNING],
+    ERROR: [RUNNING, SKIPPED]
+}
+
+TERMINAL_STATES = {SUCCESS, ERROR, CANCELLED}
+
+
+def is_valid(state):
+    return state in _ALL
+
+
+def is_invalid(state):
+    return not is_valid(state)
+
+
+def is_completed(state):
+    return state in [SUCCESS, ERROR, CANCELLED, SKIPPED]
+
+
+def is_cancelled(state):
+    return state == CANCELLED
+
+
+def is_skipped(state):
+    return state == SKIPPED
+
+
+def is_running(state):
+    return state in [RUNNING, RUNNING_DELAYED]
+
+
+def is_waiting(state):
+    return state == WAITING
+
+
+def is_idle(state):
+    return state == IDLE
+
+
+def is_paused(state):
+    return state == PAUSED
+
+
+def is_planned(state):
+    return state == PLANNED
+
+
+def is_paused_or_completed(state):
+    return is_paused(state) or is_completed(state)
+
+
+def is_cancelled_or_skipped(state):
+    return is_cancelled(state) or is_skipped(state)
+
+
+def is_paused_or_idle(state):
+    return is_paused(state) or is_idle(state)
+
+
+def is_valid_transition(from_state, to_state):
+    if is_invalid(from_state) or is_invalid(to_state):
+        return False
+
+    if from_state == to_state:
+        return True
+
+    return to_state in _VALID_TRANSITIONS[from_state]
+
+
+def is_active_state(state):
+    return state in [RUNNING or PAUSED]

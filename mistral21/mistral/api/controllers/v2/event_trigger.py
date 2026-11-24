@@ -1,0 +1,176 @@
+# Copyright 2016 - IBM Corp.
+# Copyright 2016 Catalyst IT Limited
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+from oslo_log import log as logging
+from pecan import rest
+import wsmeext.pecan as wsme_pecan
+
+from mistral.api import access_control as acl
+from mistral.api.controllers.v2 import resources
+from mistral.api.controllers.v2 import types
+from mistral import context as auth_ctx
+from mistral.db.v2 import api as db_api
+from mistral import exceptions as exc
+from mistral.services import triggers
+from mistral.utils import rest_utils
+
+LOG = logging.getLogger(__name__)
+
+UPDATE_NOT_ALLOWED = ['exchange', 'topic', 'event']
+CREATE_MANDATORY = set(['exchange', 'topic', 'event', 'workflow_id'])
+
+
+class EventTriggersController(rest.RestController):
+    @rest_utils.wrap_wsme_controller_exception
+    @wsme_pecan.wsexpose(resources.EventTrigger, types.uuid, types.uniquelist)
+    def get(self, id, fields=''):
+        """Returns the specified event_trigger."""
+        acl.enforce('event_triggers:get', auth_ctx.ctx())
+
+        LOG.debug('Fetch event trigger [id=%s]', id)
+
+        if fields and 'id' not in fields:
+            fields.insert(0, 'id')
+
+        # Use retries to prevent possible failures.
+        r = rest_utils.create_db_retry_object()
+        db_model = r.call(db_api.get_event_trigger, id, fields=fields)
+        if fields:
+            return resources.EventTrigger.from_tuples(zip(fields, db_model))
+        return resources.EventTrigger.from_db_model(db_model, fields=fields)
+
+    @rest_utils.wrap_wsme_controller_exception
+    @wsme_pecan.wsexpose(resources.EventTrigger, body=resources.EventTrigger,
+                         status_code=201)
+    def post(self, event_trigger):
+        """Creates a new event trigger."""
+        acl.enforce('event_triggers:create', auth_ctx.ctx())
+
+        values = event_trigger.to_dict()
+        input_keys = [k for k in values if values[k]]
+
+        if CREATE_MANDATORY - set(input_keys):
+            raise exc.EventTriggerException(
+                "Params %s must be provided for creating event trigger." %
+                CREATE_MANDATORY
+            )
+
+        if values.get('scope') == 'public':
+            acl.enforce('event_triggers:publicize', auth_ctx.ctx())
+
+        LOG.debug('Create event trigger: %s', values)
+
+        db_model = rest_utils.rest_retry_on_db_error(
+            triggers.create_event_trigger
+        )(
+            name=values.get('name', ''),
+            exchange=values.get('exchange'),
+            topic=values.get('topic'),
+            event=values.get('event'),
+            workflow_id=values.get('workflow_id'),
+            scope=values.get('scope'),
+            workflow_input=values.get('workflow_input'),
+            workflow_params=values.get('workflow_params'),
+        )
+
+        return resources.EventTrigger.from_db_model(db_model)
+
+    @rest_utils.wrap_wsme_controller_exception
+    @wsme_pecan.wsexpose(resources.EventTrigger, types.uuid,
+                         body=resources.EventTrigger)
+    def put(self, id, event_trigger):
+        """Updates an existing event trigger.
+
+        The exchange, topic and event can not be updated. The right way to
+        change them is to delete the event trigger first, then create a new
+        event trigger with new params.
+        """
+        acl.enforce('event_triggers:update', auth_ctx.ctx())
+
+        values = event_trigger.to_dict()
+
+        if values.get('scope') == 'public':
+            acl.enforce('event_triggers:publicize', auth_ctx.ctx())
+
+        for field in UPDATE_NOT_ALLOWED:
+            if values.get(field):
+                raise exc.EventTriggerException(
+                    "Can not update fields %s of event trigger." %
+                    UPDATE_NOT_ALLOWED
+                )
+
+        LOG.debug('Update event trigger: [id=%s, values=%s]', id, values)
+
+        @rest_utils.rest_retry_on_db_error
+        def _update_event_trigger():
+            with db_api.transaction():
+                # ensure that event trigger exists
+                db_api.get_event_trigger(id)
+
+                return triggers.update_event_trigger(id, values)
+
+        db_model = _update_event_trigger()
+
+        return resources.EventTrigger.from_db_model(db_model)
+
+    @rest_utils.wrap_wsme_controller_exception
+    @wsme_pecan.wsexpose(None, types.uuid, status_code=204)
+    def delete(self, id):
+        """Delete event trigger."""
+        acl.enforce('event_triggers:delete', auth_ctx.ctx())
+
+        LOG.debug("Delete event trigger [id=%s]", id)
+
+        @rest_utils.rest_retry_on_db_error
+        def _delete_event_trigger():
+            with db_api.transaction():
+                event_trigger = db_api.get_event_trigger(id)
+
+                triggers.delete_event_trigger(event_trigger.to_dict())
+
+        _delete_event_trigger()
+
+    @rest_utils.wrap_wsme_controller_exception
+    @wsme_pecan.wsexpose(resources.EventTriggers, types.uuid, int,
+                         types.uniquelist, types.list, types.uniquelist,
+                         bool, types.jsontype)
+    def get_all(self, marker=None, limit=None, sort_keys='created_at',
+                sort_dirs='asc', fields='', all_projects=False, **filters):
+        """Return all event triggers."""
+        acl.enforce('event_triggers:list', auth_ctx.ctx())
+
+        if all_projects:
+            acl.enforce('event_triggers:list:all_projects', auth_ctx.ctx())
+
+        LOG.debug(
+            "Fetch event triggers. marker=%s, limit=%s, sort_keys=%s, "
+            "sort_dirs=%s, fields=%s, all_projects=%s, filters=%s", marker,
+            limit, sort_keys, sort_dirs, fields, all_projects, filters
+        )
+
+        return rest_utils.get_all(
+            resources.EventTriggers,
+            resources.EventTrigger,
+            db_api.get_event_triggers,
+            db_api.get_event_trigger,
+            resource_function=None,
+            marker=marker,
+            limit=limit,
+            sort_keys=sort_keys,
+            sort_dirs=sort_dirs,
+            fields=fields,
+            all_projects=all_projects,
+            **filters
+        )
