@@ -16,6 +16,8 @@
 import copy
 import json
 import jsonschema
+import jsonschema.exceptions
+import jsonschema.validators
 from osprofiler import profiler
 import re
 
@@ -53,6 +55,10 @@ PARAMS_PTRN = re.compile(r"([-_\w]+)=(%s)" % "|".join(ALL))
 
 # {(base_spec_cls, polymorphic_value): spec_cls}
 _POLYMORPHIC_CACHE = {}
+
+# Cache of jsonschema validators keyed by spec class (see
+# BaseSpec._get_schema_validator).
+_SCHEMA_VALIDATORS = {}
 
 
 @profiler.trace('lang-base-instantiate-spec', hide_args=True)
@@ -204,6 +210,27 @@ class BaseSpec(object):
 
         return schema
 
+    @classmethod
+    def _get_schema_validator(cls):
+        """Returns a cached jsonschema validator for this spec class.
+
+        jsonschema.validate() re-checks the schema itself against the
+        metaschema on every call, which is very expensive (~0.1s per call)
+        and is repeated for every spec object (workflow, every task, ...).
+        Here the schema is checked once per spec class and the validator
+        is reused afterwards.
+        """
+        validator = _SCHEMA_VALIDATORS.get(cls)
+
+        if validator is None:
+            schema = cls.get_schema()
+            validator_cls = jsonschema.validators.validator_for(schema)
+            validator_cls.check_schema(schema)
+            validator = validator_cls(schema)
+            _SCHEMA_VALIDATORS[cls] = validator
+
+        return validator
+
     def __init__(self, data, validate):
         self._data = data
         self._validate = validate
@@ -226,7 +253,12 @@ class BaseSpec(object):
         """
 
         try:
-            jsonschema.validate(self._data, self.get_schema())
+            error = jsonschema.exceptions.best_match(
+                self._get_schema_validator().iter_errors(self._data)
+            )
+
+            if error is not None:
+                raise error
         except jsonschema.ValidationError as e:
             raise exc.InvalidModelException("Invalid DSL: %s" % e)
 
