@@ -38,6 +38,9 @@ jobs:
           - name: qubership-mistral
             file: Dockerfile
             context: .
+          - name: qubership-mistral-21
+            file: mistral21/Dockerfile
+            context: mistral21
           - name: qubership-mistral-tests
             file: tests/robot/Dockerfile
             context: tests/robot
