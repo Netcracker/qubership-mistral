@@ -1,5 +1,5 @@
 kopf
-kubernetes<36
+kubernetes<38
 pykube-ng
 pyyaml
 requests
