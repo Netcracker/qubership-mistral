@@ -777,17 +777,35 @@ Force cancel propagates to sub-workflow tasks
 
 Direct steps with @ notation - case 1
     [Tags]    basic
+    [Documentation]    task3@2 starts a sub-workflow with invalid input. That is a structural error,
+    ...    so the engine force-fails the whole workflow immediately (task_handler.force_fail_task)
+    ...    and drops commands of tasks that finish afterwards. Sibling branches task2@1 and task2@3
+    ...    are still in flight at that moment, so whether task4@1 and task4@3 get created depends on
+    ...    timing. Only the deterministic part is asserted strictly.
     Recreate the invalid_input_test_sub workflow
     Recreate the invalid_input_test_main_case0 workflow, start and wait ERROR state
 
-    number of tasks equals    7
+    # Deterministic: task3@2 can only be created after task1@1 and task2@2 succeeded.
     state of task1@1@blabla task must be equal SUCCESS
-    state of task2@1@blabla task must be equal SUCCESS
     state of task2@2@blabla task must be equal SUCCESS
-    state of task2@3@blabla task must be equal SUCCESS
     state of task3@2@blabla task must be equal ERROR
-    state of task4@1@blabla task must be equal SUCCESS
-    state of task4@3@blabla task must be equal SUCCESS
+
+    ${tasks}=    Get tasks
+    ${states}=    Evaluate    {t.name: t.state for t in $tasks}
+
+    # task2@1 and task2@3 are created together with task2@2, i.e. before task3@2 exists.
+    Should Contain    ${states}    task2@1@blabla
+    Should Contain    ${states}    task2@3@blabla
+    # task4@2 depends on task3@2 on-success, so it must never be created.
+    Should Not Contain    ${states}    task4@2@blabla
+
+    # Racy: these may be still running, or may not have been created at all.
+    # Whatever exists must not be in ERROR.
+    FOR    ${name}    IN    task2@1@blabla    task2@3@blabla    task4@1@blabla    task4@3@blabla
+        IF    '${name}' in $states
+            Should Not Be Equal    ${states}[${name}]    ERROR    ${name} must not fail
+        END
+    END
 
 Direct steps with @ notation - case 2
     [Tags]    basic
