@@ -165,6 +165,7 @@ jobs:
         with:
           config-name: release-drafter-config.yml
           publish: true
+          latest: false
           name: ${{ inputs.release }}
           tag: ${{ inputs.release }}
           version: ${{ inputs.release }}
