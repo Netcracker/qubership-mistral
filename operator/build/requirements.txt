@@ -4,7 +4,7 @@ pykube-ng
 pyyaml
 requests
 
-attrs<22.1.0
+attrs<26.1.1
 urllib3>=2.8.0
 charset-normalizer<2.1.2
 google-auth<2.62.2
