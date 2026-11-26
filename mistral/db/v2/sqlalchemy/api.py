@@ -276,6 +276,10 @@ def _delete_all(model, **kwargs):
 
 def _get_collection(model, insecure=False, limit=None, marker=None,
                     sort_keys=None, sort_dirs=None, fields=None, **filters):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     columns = (
         tuple([getattr(model, f) for f in fields if hasattr(model, f)])
         if fields else ()
@@ -298,6 +302,10 @@ def _get_collection(model, insecure=False, limit=None, marker=None,
 
 
 def get_db_objects(model, insecure=False, **filters):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     query = b.model_query(model) if insecure else _secure_query(model)
     query = db_filters.apply_filters(query, model, **filters)
 
@@ -305,6 +313,10 @@ def get_db_objects(model, insecure=False, **filters):
 
 
 def _get_count(model, insecure=False, **filters):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     query = b.model_query(model) if insecure else _secure_query(model)
 
     query = db_filters.apply_filters(query, model, **filters)
@@ -319,6 +331,10 @@ def _get_db_object_by_name(model, name, columns=()):
 
 
 def _get_db_object_by_id(model, id, insecure=False, columns=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     columns = (
         tuple([getattr(model, f) for f in columns if hasattr(model, f)])
         if columns and isinstance(columns, list) else columns
@@ -336,6 +352,10 @@ def _get_db_object_by_id(model, id, insecure=False, columns=()):
 def _get_db_object_by_name_and_namespace_or_id(model, identifier,
                                                namespace=None, insecure=False,
                                                columns=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     columns = (
         tuple([getattr(model, f) for f in columns if hasattr(model, f)])
         if columns and isinstance(columns, list) else columns
@@ -366,6 +386,10 @@ def _get_db_object_by_name_and_namespace_or_id(model, identifier,
 def _get_db_object_by_name_and_namespace(model, name,
                                          namespace='', insecure=False,
                                          columns=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     query = (
         b.model_query(model, columns=columns)
         if insecure
@@ -379,6 +403,37 @@ def _get_db_object_by_name_and_namespace(model, name,
         sa.and_(
             model.name == name,
             model.namespace == namespace
+        )
+    )
+
+    return query.first()
+
+
+def _get_db_object_by_name_namespace_and_project(model, name, namespace,
+                                                 project_id, columns=()):
+    query = b.model_query(model, columns=columns)
+
+    if namespace is None:
+        namespace = ''
+
+    query = query.filter(
+        sa.and_(
+            model.name == name,
+            model.namespace == namespace,
+            model.project_id == project_id
+        )
+    )
+
+    return query.first()
+
+
+def _get_db_object_by_name_and_project(model, name, project_id, columns=()):
+    query = b.model_query(model, columns=columns)
+
+    query = query.filter(
+        sa.and_(
+            model.name == name,
+            model.project_id == project_id
         )
     )
 
@@ -440,7 +495,24 @@ def create_workbook(values, session=None):
 @b.session_aware()
 def update_workbook(name, values, session=None):
     namespace = values.get('namespace')
-    wb = get_workbook(name, namespace=namespace)
+
+    # If several projects have a workbook with the same name, update the one
+    # of the current project, not a public one of another project. See the
+    # comment in create_or_update_workflow_definition().
+    wb = _get_db_object_by_name_namespace_and_project(
+        models.Workbook,
+        name,
+        namespace,
+        security.get_project_id()
+    )
+
+    if not wb:
+        wb = get_workbook(name, namespace=namespace)
+
+    # The check requires an authentication context, which internal
+    # maintenance calls don't have.
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(wb)
 
     wb.update(values.copy())
 
@@ -449,7 +521,10 @@ def update_workbook(name, values, session=None):
 
 @b.session_aware()
 def create_or_update_workbook(name, values, session=None):
-    if not _get_db_object_by_name(models.Workbook, name):
+    namespace = values.get('namespace')
+
+    if not _get_db_object_by_name_namespace_and_project(
+            models.Workbook, name, namespace, security.get_project_id()):
         return create_workbook(values)
     else:
         return update_workbook(name, values)
@@ -491,13 +566,16 @@ def get_workflow_definition(identifier, namespace='', fields=(), session=None):
         (WorkflowDefinition.name,)
     :return: Workflow definition.
     """
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
     wf_def = _get_db_object_by_name_and_namespace_or_id(
         models.WorkflowDefinition,
         identifier,
         namespace=namespace,
-        insecure=ctx.is_admin,
+        insecure=insecure,
         columns=fields
     )
 
@@ -619,12 +697,24 @@ def update_workflow_definition(identifier, values, session=None):
 
 @b.session_aware()
 def create_or_update_workflow_definition(name, values, session=None):
-    namespace = values.get('namespace')
-    if _get_db_object_by_name_and_namespace_or_id(
-            models.WorkflowDefinition,
-            name,
-            namespace=namespace):
-        return update_workflow_definition(name, values)
+    # NOTE(amorin): A written object always ends up in the project of the
+    # current security context (see model_base.register_secure_model_hooks),
+    # so the object to update must be looked up by the same unique key
+    # (name, namespace, project id) the write would produce. A broader
+    # lookup (e.g. across all projects for an admin) may return an object
+    # of another project with the same name; updating it would move it
+    # into the current project and violate the unique constraint if the
+    # current project already has its own object under that name.
+    wf_def = _get_db_object_by_name_namespace_and_project(
+        models.WorkflowDefinition,
+        name,
+        values.get('namespace'),
+        security.get_project_id()
+    )
+
+    if wf_def:
+        return update_workflow_definition(wf_def.id, values)
+
     return create_workflow_definition(values)
 
 
@@ -725,7 +815,20 @@ def load_code_source(identifier, fields=(), session=None, namespace=''):
 
 @b.session_aware()
 def update_code_source(identifier, values, namespace='', session=None):
-    code_src = get_code_source(identifier, namespace=namespace)
+    # If several projects have a code source with the same name, update the
+    # one of the current project. See create_or_update_workflow_definition().
+    code_src = _get_db_object_by_name_namespace_and_project(
+        models.CodeSource,
+        identifier,
+        namespace,
+        security.get_project_id()
+    )
+
+    if not code_src:
+        code_src = get_code_source(identifier, namespace=namespace)
+
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(code_src)
 
     values['version'] = code_src.version + 1
 
@@ -773,7 +876,24 @@ def create_dynamic_action_definition(values, session=None):
 @b.session_aware()
 def update_dynamic_action_definition(identifier, values, namespace='',
                                      session=None):
-    action_def = get_dynamic_action_definition(identifier, namespace=namespace)
+    # If several projects have a dynamic action with the same name, update
+    # the one of the current project. See
+    # create_or_update_workflow_definition().
+    action_def = _get_db_object_by_name_namespace_and_project(
+        models.DynamicActionDefinition,
+        identifier,
+        namespace,
+        security.get_project_id()
+    )
+
+    if not action_def:
+        action_def = get_dynamic_action_definition(
+            identifier,
+            namespace=namespace
+        )
+
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(action_def)
 
     action_def.update(values.copy())
 
@@ -912,7 +1032,23 @@ def create_action_definition(values, session=None):
 @b.session_aware()
 def update_action_definition(identifier, values, session=None):
     namespace = values.get('namespace', '')
-    a_def = get_action_definition(identifier, namespace=namespace)
+
+    # If several projects have an action definition with the same name,
+    # update the one of the current project, not an arbitrary one.
+    a_def = _get_db_object_by_name_namespace_and_project(
+        models.ActionDefinition,
+        identifier,
+        namespace,
+        security.get_project_id()
+    )
+
+    if not a_def:
+        a_def = get_action_definition(identifier, namespace=namespace)
+
+    # The check requires an authentication context, which internal
+    # maintenance calls (e.g. 'mistral-db-manage populate') don't have.
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(a_def)
 
     a_def.update(values.copy())
 
@@ -921,14 +1057,20 @@ def update_action_definition(identifier, values, session=None):
 
 @b.session_aware()
 def create_or_update_action_definition(name, values, session=None):
-    namespace = values.get('namespace', '')
-    if not _get_db_object_by_name_and_namespace(
-            models.ActionDefinition,
-            name,
-            namespace=namespace):
-        return create_action_definition(values)
-    else:
-        return update_action_definition(name, values)
+    # NOTE(amorin): The object to update must be looked up by the same
+    # unique key (name, namespace, project id) the write would produce.
+    # See the comment in create_or_update_workflow_definition().
+    a_def = _get_db_object_by_name_namespace_and_project(
+        models.ActionDefinition,
+        name,
+        values.get('namespace', ''),
+        security.get_project_id()
+    )
+
+    if a_def:
+        return update_action_definition(a_def.id, values)
+
+    return create_action_definition(values)
 
 
 @b.session_aware()
@@ -948,8 +1090,8 @@ def delete_action_definitions(session=None, **kwargs):
 @b.session_aware()
 def get_action_execution(id, insecure=False, fields=(), session=None):
     # Allow admin to retrieve action execution by overwriting insecure
-    ctx = context.ctx()
-    insecure = ctx.is_admin or insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
     a_ex = _get_db_object_by_id(models.ActionExecution, id, insecure=insecure,
                                 columns=fields)
@@ -990,6 +1132,10 @@ def create_action_execution(values, session=None):
 
 @b.session_aware()
 def update_action_execution(id, values, insecure=False, session=None):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     a_ex = get_action_execution(id, insecure)
 
     a_ex.update(values.copy())
@@ -1040,12 +1186,15 @@ def _get_action_executions(**kwargs):
 
 @b.session_aware()
 def get_workflow_execution(id, fields=(), session=None):
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
     wf_ex = _get_db_object_by_id(
         models.WorkflowExecution,
         id,
-        insecure=ctx.is_admin,
+        insecure=insecure,
         columns=fields
     )
 
@@ -1112,7 +1261,10 @@ def create_or_update_workflow_execution(id, values, session=None):
 @b.session_aware()
 def delete_workflow_execution(id, strict=True, session=None):
     model = models.WorkflowExecution
-    insecure = context.ctx().is_admin
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
     query = b.model_query(model) if insecure else _secure_query(model)
 
     try:
@@ -1157,7 +1309,11 @@ def delete_workflow_execution_recurse(wf_ex_id):
 
 def _get_all_direct_subworkflows(wf_ex_id):
     model = models.WorkflowExecution
-    insecure = context.ctx().is_admin
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     if insecure:
         query = b.model_query(model, [model.id])
     else:
@@ -1231,14 +1387,13 @@ def get_tasks_statistics_of_execution(wf_ex_id, current_only=False,
 
 @b.session_aware()
 def get_task_execution(id, fields=(), session=None):
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
-    task_ex = _get_db_object_by_id(
-        models.TaskExecution,
-        id,
-        insecure=ctx.is_admin,
-        columns=fields
-    )
+    task_ex = _get_db_object_by_id(models.TaskExecution, id,
+                                   insecure=insecure, columns=fields)
 
     if not task_ex:
         raise exc.DBEntityNotFoundError(
@@ -1830,12 +1985,15 @@ def _get_completed_root_executions_query(columns):
 
 @b.session_aware()
 def get_cron_trigger(identifier, session=None, fields=()):
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
 
     cron_trigger = _get_db_object_by_name_and_namespace_or_id(
         models.CronTrigger,
         identifier,
-        insecure=ctx.is_admin,
+        insecure=insecure,
         columns=fields,
     )
 
@@ -1849,9 +2007,13 @@ def get_cron_trigger(identifier, session=None, fields=()):
 
 @b.session_aware()
 def get_cron_trigger_by_id(id, session=None, fields=()):
-    ctx = context.ctx()
+    # Allow admin to retrieve all objects by overwriting insecure
+    insecure = False
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     cron_trigger = _get_db_object_by_id(models.CronTrigger, id,
-                                        insecure=ctx.is_admin,
+                                        insecure=insecure,
                                         columns=fields)
     if not cron_trigger:
         raise exc.DBEntityNotFoundError(
@@ -1910,6 +2072,10 @@ def create_cron_trigger(values, session=None):
 
 @b.session_aware()
 def update_cron_trigger(identifier, values, session=None, query_filter=None):
+    # NOTE: no cross-project guard here on purpose. This is called by the
+    # periodic scheduler (mistral.services.periodic), which legitimately
+    # updates the next-execution bookkeeping of cron triggers across all
+    # projects. The cron trigger REST API exposes no update operation.
     cron_trigger = get_cron_trigger(identifier)
 
     if query_filter:
@@ -1943,9 +2109,14 @@ def update_cron_trigger(identifier, values, session=None, query_filter=None):
 
 @b.session_aware()
 def create_or_update_cron_trigger(identifier, values, session=None):
-    cron_trigger = _get_db_object_by_name_and_namespace_or_id(
+    # Resolve within the caller's own project so that, when several projects
+    # have a cron trigger with the same name, the caller's own one is updated
+    # rather than another project's. See
+    # create_or_update_workflow_definition().
+    cron_trigger = _get_db_object_by_name_and_project(
         models.CronTrigger,
-        identifier
+        identifier,
+        security.get_project_id()
     )
 
     if not cron_trigger:
@@ -2017,7 +2188,20 @@ def create_environment(values, session=None):
 
 @b.session_aware()
 def update_environment(name, values, session=None):
-    env = get_environment(name)
+    # If several projects have an environment with the same name, update the
+    # one of the current project, not a public one of another project. See
+    # the comment in create_or_update_workflow_definition().
+    env = _get_db_object_by_name_and_project(
+        models.Environment,
+        name,
+        security.get_project_id()
+    )
+
+    if not env:
+        env = get_environment(name)
+
+    if context.has_ctx():
+        m_dbutils.check_db_obj_access(env)
 
     env.update(values)
 
@@ -2026,7 +2210,8 @@ def update_environment(name, values, session=None):
 
 @b.session_aware()
 def create_or_update_environment(name, values, session=None):
-    env = _get_db_object_by_name(models.Environment, name)
+    env = _get_db_object_by_name_and_project(
+        models.Environment, name, security.get_project_id())
 
     if not env:
         return create_environment(values)
@@ -2216,6 +2401,10 @@ def _get_accepted_resources(res_type):
 
 @b.session_aware()
 def get_event_trigger(id, insecure=False, session=None, fields=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     event_trigger = _get_db_object_by_id(models.EventTrigger, id, insecure,
                                          columns=fields)
 
@@ -2229,6 +2418,10 @@ def get_event_trigger(id, insecure=False, session=None, fields=()):
 
 @b.session_aware()
 def load_event_trigger(id, insecure=False, session=None, fields=()):
+    # Allow admin to retrieve all objects by overwriting insecure
+    if context.has_ctx():
+        insecure = context.ctx().is_admin or insecure
+
     return _get_db_object_by_id(models.EventTrigger, id, insecure,
                                 columns=fields)
 

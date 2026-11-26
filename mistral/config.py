@@ -824,6 +824,65 @@ oauth2_opts = [
     )
 ]
 
+k8s_sa_opts = [
+    cfg.StrOpt(
+        'audience',
+        default='netcracker',
+        help=_('Required audience ("aud" claim) of inbound ServiceAccount '
+               'tokens.')
+    ),
+]
+
+oauth2_opts = [
+    cfg.StrOpt(
+        'idp_url',
+        help=_('Identity provider URL')
+    ),
+    cfg.StrOpt(
+        'jwk_exp',
+        help=_('JSON Web Key RSA exponent')
+    ),
+    cfg.StrOpt(
+        'jwk_exp',
+        help=_('JSON Web Key RSA exponent')
+    ),
+    cfg.StrOpt(
+        'jwk_mod',
+        help=_('JSON Web Key RSA modules')
+    ),
+    cfg.StrOpt(
+        'security_profile',
+        choices=['prod', 'dev'],
+        default='dev',
+        help=_('Security in actions: "dev" - disable, "prod" - enable')
+    ),
+    cfg.StrOpt(
+        'client_id',
+        help=_('Public identifier for apps')
+    ),
+    cfg.StrOpt(
+        'client_secret',
+        help=_('Secret known only to the application and the '
+               'authorization server')
+    )
+]
+
+action_std_ssh_opts = [
+    cfg.ListOpt(
+        'allowed_proxy_commands',
+        default=[],
+        help=_('Allow-list of SSH ProxyCommand strings that the '
+               'std.ssh_proxied action may use. The proxy_command is run '
+               'as a local subprocess on the executor host before SSH '
+               'authentication, so a caller-supplied value is a remote '
+               'code execution vector. The action input is matched against '
+               'this list by exact string; anything not listed is '
+               'rejected. Empty (the default) disables proxy_command '
+               'entirely, so an ordinary user cannot run commands on the '
+               'executor. Only add entries you fully trust and that do not '
+               'take attacker-controllable arguments.')
+    ),
+]
 
 yaql_opts = [
     cfg.IntOpt(
@@ -1030,6 +1089,7 @@ AUTH_GROUP = 'auth'
 KEYCLOAK_OIDC_GROUP = "keycloak_oidc"
 K8S_SA_GROUP = "k8s_sa"
 YAQL_GROUP = "yaql"
+ACTION_STD_SSH_GROUP = 'action_std_ssh'
 HEALTHCHECK_GROUP = 'healthcheck'
 KEYSTONE_GROUP = "keystone"
 OAUTH2_GROUP = 'oauth2'
@@ -1075,6 +1135,7 @@ CONF.register_opts(auth_opts, group=AUTH_GROUP)
 CONF.register_opts(keycloak_oidc_opts, group=KEYCLOAK_OIDC_GROUP)
 CONF.register_opts(k8s_sa_opts, group=K8S_SA_GROUP)
 CONF.register_opts(yaql_opts, group=YAQL_GROUP)
+CONF.register_opts(action_std_ssh_opts, group=ACTION_STD_SSH_GROUP)
 CONF.register_opts(healthcheck_opts, group=HEALTHCHECK_GROUP)
 CONF.register_opts(oauth2_opts, group=OAUTH2_GROUP)
 CONF.register_opts(monitoring_opts, group=MONITORING_GROUP)
@@ -1125,6 +1186,7 @@ def list_opts():
         (KEYCLOAK_OIDC_GROUP, keycloak_oidc_opts),
         (K8S_SA_GROUP, k8s_sa_opts),
         (YAQL_GROUP, yaql_opts),
+        (ACTION_STD_SSH_GROUP, action_std_ssh_opts),
         (HEALTHCHECK_GROUP, healthcheck_opts),
         (OAUTH2_GROUP, oauth2_opts),
         (ACTION_HEARTBEAT_GROUP, action_heartbeat_opts),
