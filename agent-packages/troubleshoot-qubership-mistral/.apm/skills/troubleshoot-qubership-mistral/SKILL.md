@@ -1,6 +1,6 @@
 ---
 name: troubleshoot-qubership-mistral
-description: Diagnose Qubership Mistral deployment or runtime failures by matching an exact alert name, log/error string, or execution error to a section of references/troubleshooting.md. Covers the alerts defined in alarms_template.yaml of the mistral-operator chart, executions and tasks that are in error or stuck, heartbeat errors, "Failed to find workflow", 401s in K8s/hybrid M2M mode, failed mistral-update-db migrations, unresponsive API, RabbitMQ and DB connection problems, DNS failures in composite namespaces, and failed robot integration tests (references/robot-tests.md).
+description: Diagnose Qubership Mistral deployment or runtime failures by matching an exact alert name, log/error string, or execution error to a section of references/troubleshooting.md. Covers the alerts defined in alarms_template.yaml of the mistral-operator chart, OpenShift SCC rejections caused by a missing or wrong PAAS_PLATFORM deploy parameter, executions and tasks that are in error or stuck, heartbeat errors, "Failed to find workflow", 401s in K8s/hybrid M2M mode, failed mistral-update-db migrations, unresponsive API, RabbitMQ and DB connection problems, DNS failures in composite namespaces, and failed robot integration tests (references/robot-tests.md).
 ---
 
 ## Finding the section
@@ -72,6 +72,7 @@ section: `MistralAPIDegraded`, `MistralEngineDegraded`, `MistralExecutorDegraded
 | `<reply_queue> doesn't exist, drop reply to <message_id>` or `failed to send after 60 seconds due to a missing queue` | RPC Request Times Out but the Operation Was Executed |
 | `There are active connections to this database.` in the deploy log | Mistral Cannot Deploy Because of Active Connections to DB |
 | `asyncpg.exceptions.InvalidCatalogNameError: database <mistral_db_name> does not exist` in `bluegreen-agent` on first startup | Expected Error: InvalidCatalogNameError on Initial Startup of Bluegreen Agent (benign) |
+| `restricted-v2: .spec.securityContext.fsGroup: Invalid value: [<id>]: <id> is not an allowed group` or `.containers[0].runAsUser: Invalid value: <id>: must be in the ranges:` in events of the `mistral-operator` pod or the `mistral-update-db` job on OpenShift | Mistral Cannot Be Deployed on OpenShift: `PAAS_PLATFORM` is not `OPENSHIFT` |
 | `Mistral critical tests failed`, or `mistral-tests` pod in `Error` / `CrashLoopBackOff` / `OOMKilled` | `references/robot-tests.md` (not `troubleshooting.md`) |
 
 ## Symptom (no exact string) → section
@@ -83,6 +84,7 @@ section: `MistralAPIDegraded`, `MistralEngineDegraded`, `MistralExecutorDegraded
 | Mistral API slow or not responding | Mistral API is Not Responding |
 | Execution of a workflow does not finish | Execution of Workflow is Stuck |
 | A Mistral service did not come up after deploy | Mistral Service was not Deployed |
+| Operator pod or `mistral-update-db` job stays rejected by the `restricted` SCC on OpenShift, so Mistral never deploys | Mistral Cannot Be Deployed on OpenShift: `PAAS_PLATFORM` is not `OPENSHIFT` |
 | Execution or action creation request hangs or times out | Request on Execution Creation is Stuck; if the operation was in fact executed and only the response timed out, RPC Request Times Out but the Operation Was Executed |
 | RPC call timed out (HTTP 500 from the API, or an RPC error in the executor or engine log), but the execution or action result exists | RPC Request Times Out but the Operation Was Executed |
 | Mistral entities not visible through the API | Different IDP Tenants |
@@ -103,6 +105,9 @@ The guide contains operator procedures (`oc`, `rabbitmqctl`, SQL, Alembic). Neve
   first.
 - The "How to Clean Mistral Database" steps (`DELETE`, `VACUUM FULL`) unless the ticket asks to free space or trim
   history. Advise a backup first.
+- Granting `anyuid` SCC to the `mistral-operator` or `default` service accounts, or annotating the namespace
+  `sa.scc.uid-range` / `sa.scc.supplemental-groups`, to get past an OpenShift SCC rejection. The fix is to set the
+  `PAAS_PLATFORM` deploy parameter to `OPENSHIFT`; the workarounds only widen the namespace permissions.
 ## Config value conventions
 
 Where each parameter lives (`mistral-operator` chart values, rendered into the `MistralService` CR):
@@ -114,6 +119,7 @@ Where each parameter lives (`mistral-operator` chart values, rendered into the `
 | `mistralCommonParams.auth.k8sSa.audience` (default `netcracker`) | chart values → `spec.mistralCommonParams.auth.k8sSa`; audience required in inbound ServiceAccount tokens |
 | `mistralCommonParams.rabbit.host` | chart values → `spec.mistralCommonParams.rabbit.host`; overridden by `INFRA_RABBITMQ_HOST` when cloud integration is enabled |
 | `mistralCustomParams`, `mistralCustomApiParams`, `mistralCustomEngineParams`, `mistralCustomExecutorParams`, `mistralCustomNotifierParams` | chart values → config maps holding `custom-mistral.conf` (all services / api / engine / executor / notifier) |
+| `PAAS_PLATFORM` (`KUBERNETES` / `OPENSHIFT`) | top-level deploy parameter passed by the Cloud Deployer (CMDB), common for all services; not defined in the chart `values.yaml` and defaults to `KUBERNETES`, so on OpenShift it must be exactly `OPENSHIFT` |
 
 Rules:
 
