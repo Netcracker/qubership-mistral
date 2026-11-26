@@ -26,6 +26,7 @@
 * [How to Clean Mistral Database](#how-to-clean-mistral-database)
 * [Monitoring Alarms Description](#monitoring-alarms-description)
 * [Expected Error: InvalidCatalogNameError on Initial Startup of Bluegreen Agent](#expected-error-invalidcatalognameerror-on-initial-startup-of-bluegreen-agent)
+* [Mistral Cannot Be Deployed on OpenShift: `PAAS_PLATFORM` is not `OPENSHIFT`](#mistral-cannot-be-deployed-on-openshift-paas_platform-is-not-openshift)
 
 
 ## Mistral tasks stuck in processing
@@ -543,3 +544,13 @@ This error can be safely ignored.
 It occurs on initial initialization when the mistral database has not yet been provisioned or created.
 
 The operator automatically restarts, initializes the database, and resumes normal execution without manual intervention.
+
+## Mistral Cannot Be Deployed on OpenShift: `PAAS_PLATFORM` is not `OPENSHIFT`
+
+`PAAS_PLATFORM` is a Cloud Deployer (CMDB) parameter, common for all services and not defined in the chart `values.yaml`. If it is missing or set to `KUBERNETES` on an OpenShift cluster, the chart renders fixed IDs (`runAsUser`, `runAsGroup`, `fsGroup` of `1001` for the operator, `1005000` for `mistral-update-db`), and the default `restricted` SCCs reject the pods:
+
+```text
+restricted-v2: .spec.securityContext.fsGroup: Invalid value: [1001]: 1001 is not an allowed group
+```
+
+To solve this problem, set `PAAS_PLATFORM` to exactly `OPENSHIFT` for the cloud in CMDB and redeploy. For a manual Helm install, use `--set PAAS_PLATFORM=OPENSHIFT`. OpenShift then assigns the IDs from the namespace range, so no `anyuid` SCC binding is needed.
