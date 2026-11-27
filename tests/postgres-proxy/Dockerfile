@@ -1,4 +1,4 @@
-FROM haproxy:1.9.16-alpine@sha256:1ce3536f2a9ad53f1ccb953c23146e88e9bb138b74f38dae03e9494140a643cf
+FROM haproxy:3.4.8-alpine@sha256:8aa6458a9d22a8364a2d2ee9ce93de0cc4a2789e3cf63f0b44adc972863724d7
 
 ENV CONF_DIR=/usr/local/etc/haproxy/ \
     PROXY_PORT=5433 \
